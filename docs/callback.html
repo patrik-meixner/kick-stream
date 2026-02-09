@@ -12,14 +12,13 @@ h1{color:#53FC18;font-size:1.5rem;margin-bottom:.5rem}
 p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
 .spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#53FC18;border-radius:50%;animation:spin .8s linear infinite;margin:1rem auto}
 @keyframes spin{to{transform:rotate(360deg)}}
-.ok{color:#53FC18;font-size:2rem}
 .err{color:#EB0400}
 </style>
 </head>
 <body>
 <div class="card" id="card">
   <div class="spinner" id="spinner"></div>
-  <h1 id="title">Connecting to TV...</h1>
+  <h1 id="title">Redirecting to TV...</h1>
   <p id="msg">Sending authorization to your TV.</p>
 </div>
 <script>
@@ -46,7 +45,6 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
   // Decode base64url → TV's LAN callback URL
   var tvUrl;
   try {
-    // base64url → base64: replace - with +, _ with /
     var b64 = tvUrlEncoded.replace(/-/g, '+').replace(/_/g, '/');
     tvUrl = atob(b64);
   } catch (e) {
@@ -59,20 +57,11 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
     return;
   }
 
-  // Relay the auth code to the TV's HTTP server, passing only the random token as state
+  // Redirect the browser directly to the TV's HTTP server.
+  // Unlike fetch(), a full page navigation from HTTPS → HTTP is allowed by browsers.
+  // The TV's server will show the "Authorized!" success page.
   var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
-
-  fetch(relayUrl, { mode: 'no-cors' })
-    .then(function() {
-      show('Authorized!', 'You can close this tab and return to your TV.', false);
-    })
-    .catch(function() {
-      // no-cors means we can't read the response, but the request was likely sent.
-      // Show success after a brief delay.
-      setTimeout(function() {
-        show('Authorized!', 'You can close this tab and return to your TV.', false);
-      }, 500);
-    });
+  window.location.href = relayUrl;
 })();
 
 function show(title, msg, isError) {
