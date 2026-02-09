@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.kickstream.ui.components.KickLoader
 import com.kickstream.util.QrCodeUtil
 
 @Composable
@@ -61,20 +62,8 @@ fun LoginScreen(
         contentAlignment = Alignment.Center,
     ) {
         when {
-            uiState.isCheckingToken -> {
-                Text(
-                    text = "Loading...",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-
-            uiState.isExchangingCode -> {
-                Text(
-                    text = "Signing in...",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+            uiState.isCheckingToken || uiState.isExchangingCode -> {
+                KickLoader()
             }
 
             uiState.showWebView && uiState.webViewAuthUrl != null -> {

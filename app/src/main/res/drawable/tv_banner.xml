@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Dark background (standard TV card dark) -->
+    <path
+        android:fillColor="#1A1A2E"
+        android:pathData="M0,0h320v180H0z" />
+    <!-- KICK wordmark centered (scaled to ~200x64, offset to center: x=(320-200)/2=60, y=(180-64)/2=58) -->
+    <group
+        android:translateX="60"
+        android:translateY="58"
+        android:scaleX="0.2144"
+        android:scaleY="0.2133">
+        <path
+            android:fillColor="#53FC18"
+            android:fillType="evenOdd"
+            android:pathData="M0,0H100V66.667H133.333V33.333H166.667V0H266.667V100H233.333V133.333H200V166.667H233.333V200H266.667V300H166.667V266.667H133.333V233.333H100V300H0V0ZM666.667,0H766.667V66.667H800V33.333H833.333V0H933.333V100H900V133.333H866.667V166.667H900V200H933.333V300H833.333V266.667H800V233.333H766.667V300H666.667V0ZM300,0H400V300H300V0ZM533.333,0H466.667V33.333H433.333V266.667H466.667V300H533.333H633.333V200H533.333V100H633.333V0H533.333Z" />
+    </group>
+</vector>

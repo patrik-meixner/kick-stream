@@ -103,6 +103,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
 
+    implementation(libs.splashscreen)
+
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
 }

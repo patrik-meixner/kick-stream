@@ -13,10 +13,11 @@
     <application
         android:name=".KickStreamApp"
         android:allowBackup="false"
+        android:banner="@drawable/tv_banner"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.KickStream">
+        android:theme="@style/Theme.KickStream.Splash">
 
         <activity
             android:name=".MainActivity"

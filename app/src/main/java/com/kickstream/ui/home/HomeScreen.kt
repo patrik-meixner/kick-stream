@@ -32,6 +32,7 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kickstream.R
+import com.kickstream.ui.components.KickLoader
 import com.kickstream.ui.home.components.FollowedChannelCard
 import com.kickstream.ui.home.components.LiveChannelCard
 import com.kickstream.ui.home.components.SearchBar
@@ -46,13 +47,7 @@ fun HomeScreen(
 
     when {
         uiState.isLoading -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "Loading...",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-            }
+            KickLoader()
         }
 
         uiState.error != null && uiState.livestreams.isEmpty() && uiState.followedChannels.isEmpty() -> {

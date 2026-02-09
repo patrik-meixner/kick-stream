@@ -16,6 +16,7 @@ pusher = "2.4.4"
 coroutines = "1.9.0"
 zxing = "3.5.3"
 coil = "2.7.0"
+splashscreen = "1.0.1"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
@@ -52,6 +53,8 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" 
 
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
+
+splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
