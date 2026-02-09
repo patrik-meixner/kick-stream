@@ -29,6 +29,7 @@ android {
         buildConfigField("String", "KICK_CLIENT_ID", "\"${localProps.getProperty("kick.client.id", "")}\"")
         buildConfigField("String", "KICK_CLIENT_SECRET", "\"${localProps.getProperty("kick.client.secret", "")}\"")
         buildConfigField("String", "KICK_REDIRECT_URI", "\"${localProps.getProperty("kick.redirect.uri", "http://127.0.0.1:8374/callback")}\"")
+        buildConfigField("String", "KICK_EMULATOR_HOST", "\"${localProps.getProperty("kick.emulator.host", "")}\"")
     }
 
     signingConfigs {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import android.os.Build
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -42,13 +43,26 @@ class AuthRepository(
         val randomState = PkceUtil.generateState()
         val scopes = "user:read channel:read events:subscribe"
 
-        // Detect the TV's LAN IP so the relay page can forward the code here
-        val lanIp = getDeviceLanIp()
+        // Detect the TV's LAN IP so the relay page can forward the code here.
+        // On emulators, the LAN IP is a virtual address (10.0.2.x) unreachable from
+        // external devices. Use the host machine's IP from BuildConfig instead.
+        val lanIp = if (isEmulator()) {
+            Log.d(TAG, "Emulator detected, using BuildConfig redirect host override")
+            null // fall through to BuildConfig
+        } else {
+            getDeviceLanIp()
+        }
         val tvCallbackUrl = if (lanIp != null) {
             "http://$lanIp:$port/callback"
         } else {
-            Log.w(TAG, "Could not detect LAN IP, falling back to loopback")
-            "http://127.0.0.1:$port/callback"
+            // Fallback: extract host from BuildConfig redirect URI or use loopback
+            val overrideHost = BuildConfig.KICK_EMULATOR_HOST
+            if (overrideHost.isNotEmpty()) {
+                "http://$overrideHost:$port/callback"
+            } else {
+                Log.w(TAG, "Could not detect LAN IP, falling back to loopback")
+                "http://127.0.0.1:$port/callback"
+            }
         }
         Log.d(TAG, "TV callback URL: $tvCallbackUrl")
 
@@ -172,6 +186,16 @@ class AuthRepository(
         }
         tokenStore.clear()
     }
+
+    private fun isEmulator(): Boolean =
+        Build.FINGERPRINT.startsWith("generic") ||
+            Build.FINGERPRINT.startsWith("unknown") ||
+            Build.MODEL.contains("google_sdk") ||
+            Build.MODEL.contains("Emulator") ||
+            Build.MODEL.contains("Android SDK built for x86") ||
+            Build.MANUFACTURER.contains("Genymotion") ||
+            Build.PRODUCT.contains("sdk") ||
+            Build.PRODUCT.contains("emulator")
 
     /**
      * Detect the device's LAN IPv4 address (e.g. 192.168.x.x).
