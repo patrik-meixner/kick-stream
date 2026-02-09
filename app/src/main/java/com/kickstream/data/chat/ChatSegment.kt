@@ -22,7 +22,7 @@ data class ParsedChatMessage(
     val username: String,
     val segments: List<ChatSegment>,
     val color: String,
-    val badges: List<String>,
+    val badges: List<ChatBadgeInfo>,
     val timestamp: String,
     /** Original raw content string, kept for re-parsing when emotes load late. */
     val rawContent: String = "",

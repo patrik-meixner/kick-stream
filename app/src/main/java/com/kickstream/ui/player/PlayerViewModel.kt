@@ -29,6 +29,8 @@ data class PlayerUiState(
     val hlsUrl: String? = null,
     val chatroomId: Int? = null,
     val chatMessages: List<ParsedChatMessage> = emptyList(),
+    /** Maps subscriber badge months → custom badge image URL from the channel */
+    val subscriberBadgeUrls: Map<Int, String> = emptyMap(),
     val isChatVisible: Boolean = true,
     val isFollowed: Boolean = false,
     val showControls: Boolean = false,
@@ -80,8 +82,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 // Treat empty string as null (official API sometimes returns "")
                 var hlsUrl = channel?.stream?.url?.takeIf { it.isNotBlank() }
 
-                // Step 2: Get chatroom ID + fallback HLS from unofficial API
+                // Step 2: Get chatroom ID + fallback HLS + subscriber badges from unofficial API
                 var chatroomId: Int? = null
+                var subBadgeUrls: Map<Int, String> = emptyMap()
                 try {
                     val unofficial = unofficialApi.getChannel(slug)
                     chatroomId = unofficial.chatroom?.id
@@ -91,6 +94,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     if (hlsUrl.isNullOrBlank() && !unofficial.playbackUrl.isNullOrBlank()) {
                         hlsUrl = unofficial.playbackUrl
                         Log.d(TAG, "Using unofficial playback_url as fallback HLS")
+                    }
+                    // Extract subscriber badge image URLs (months → image URL)
+                    subBadgeUrls = unofficial.subscriberBadges
+                        ?.mapNotNull { badge ->
+                            val url = badge.badgeImage?.src?.takeIf { it.isNotBlank() }
+                            if (url != null) badge.months to url else null
+                        }
+                        ?.toMap()
+                        ?: emptyMap()
+                    if (subBadgeUrls.isNotEmpty()) {
+                        Log.d(TAG, "Subscriber badges: ${subBadgeUrls.size} (months: ${subBadgeUrls.keys})")
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to get unofficial data: ${e.message}", e)
@@ -120,6 +134,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     categoryName = categoryName,
                     hlsUrl = hlsUrl,
                     chatroomId = chatroomId,
+                    subscriberBadgeUrls = subBadgeUrls,
                     isFollowed = isFollowed,
                 )
 

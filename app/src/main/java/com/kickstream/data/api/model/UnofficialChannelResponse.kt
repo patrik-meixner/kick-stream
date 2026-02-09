@@ -14,11 +14,26 @@ data class UnofficialChannelResponse(
     val slug: String,
     @SerialName("playback_url") val playbackUrl: String? = null,
     val chatroom: UnofficialChatroom? = null,
+    @SerialName("subscriber_badges") val subscriberBadges: List<UnofficialSubscriberBadge>? = null,
 )
 
 @Serializable
 data class UnofficialChatroom(
     val id: Int,
+)
+
+@Serializable
+data class UnofficialSubscriberBadge(
+    val id: Int,
+    @SerialName("channel_id") val channelId: Int? = null,
+    val months: Int,
+    @SerialName("badge_image") val badgeImage: UnofficialBadgeImage? = null,
+)
+
+@Serializable
+data class UnofficialBadgeImage(
+    val src: String? = null,
+    val srcset: String? = null,
 )
 
 /**

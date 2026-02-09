@@ -78,7 +78,7 @@ class PusherChatClient {
                     username = dto.sender.username,
                     content = dto.content,
                     color = dto.sender.identity?.color ?: "#FFFFFF",
-                    badges = dto.sender.identity?.badges?.map { it.type } ?: emptyList(),
+                    badges = dto.sender.identity?.badges?.map { ChatBadgeInfo(it.type, it.text) } ?: emptyList(),
                     timestamp = dto.createdAt,
                 )
                 trySend(message)

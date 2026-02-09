@@ -149,6 +149,7 @@ fun PlayerScreen(
                     ) {
                         ChatSidebar(
                             messages = uiState.chatMessages,
+                            subscriberBadgeUrls = uiState.subscriberBadgeUrls,
                             modifier = Modifier.width(280.dp),
                         )
                     }

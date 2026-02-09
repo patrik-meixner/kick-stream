@@ -40,6 +40,7 @@ import coil.compose.AsyncImage
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.kickstream.R
+import com.kickstream.data.chat.ChatBadgeInfo
 import com.kickstream.data.chat.ChatSegment
 import com.kickstream.data.chat.ParsedChatMessage
 import com.kickstream.ui.theme.OnDarkSurface
@@ -72,6 +73,7 @@ private fun badgeDrawable(type: String): Int? = when (type.lowercase()) {
 @Composable
 fun ChatSidebar(
     messages: List<ParsedChatMessage>,
+    subscriberBadgeUrls: Map<Int, String> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -117,7 +119,7 @@ fun ChatSidebar(
             item { Spacer(Modifier.height(6.dp)) }
 
             items(messages, key = { it.id }) { message ->
-                ChatMessageRow(message)
+                ChatMessageRow(message, subscriberBadgeUrls)
             }
 
             item { Spacer(Modifier.height(4.dp)) }
@@ -143,7 +145,10 @@ private fun ChatHeader() {
 }
 
 @Composable
-private fun ChatMessageRow(message: ParsedChatMessage) {
+private fun ChatMessageRow(
+    message: ParsedChatMessage,
+    subscriberBadgeUrls: Map<Int, String>,
+) {
     val userColor = try {
         Color(android.graphics.Color.parseColor(message.color))
     } catch (_: Exception) {
@@ -157,24 +162,54 @@ private fun ChatMessageRow(message: ParsedChatMessage) {
 
     val annotatedText = buildAnnotatedString {
         // Badges (before username) — rendered as inline icons
-        message.badges.forEach { badgeType ->
-            val drawableRes = badgeDrawable(badgeType) ?: return@forEach
-            val badgeId = "badge_${badgeType}_${inlineContent.size}"
-            inlineContent[badgeId] = InlineTextContent(
-                placeholder = Placeholder(
-                    width = BadgeSizeSp,
-                    height = BadgeSizeSp,
-                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                ),
-            ) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(id = drawableRes),
-                    contentDescription = badgeType,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
+        message.badges.forEach { badge ->
+            val badgeId = "badge_${badge.type}_${inlineContent.size}"
+
+            // Check if this is a subscriber badge with a custom channel image
+            val subBadgeUrl = if (badge.type.equals("subscriber", ignoreCase = true)) {
+                val months = badge.text?.toIntOrNull() ?: 0
+                // Find the highest badge tier that the user qualifies for
+                subscriberBadgeUrls.keys
+                    .filter { it <= months }
+                    .maxOrNull()
+                    ?.let { subscriberBadgeUrls[it] }
+            } else null
+
+            if (subBadgeUrl != null) {
+                // Custom channel subscriber badge — load from CDN
+                inlineContent[badgeId] = InlineTextContent(
+                    placeholder = Placeholder(
+                        width = BadgeSizeSp,
+                        height = BadgeSizeSp,
+                        placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                    ),
+                ) {
+                    AsyncImage(
+                        model = subBadgeUrl,
+                        contentDescription = "sub ${badge.text}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            } else {
+                // Global badge — use local vector drawable
+                val drawableRes = badgeDrawable(badge.type) ?: return@forEach
+                inlineContent[badgeId] = InlineTextContent(
+                    placeholder = Placeholder(
+                        width = BadgeSizeSp,
+                        height = BadgeSizeSp,
+                        placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                    ),
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(id = drawableRes),
+                        contentDescription = badge.type,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
             }
-            appendInlineContent(badgeId, "[$badgeType]")
+            appendInlineContent(badgeId, "[${badge.type}]")
             append(" ")
         }
 
