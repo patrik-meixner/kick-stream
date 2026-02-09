@@ -18,9 +18,17 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
 <body>
 <div class="card" id="card">
   <div class="spinner" id="spinner"></div>
-  <h1 id="title">Redirecting to TV...</h1>
+  <h1 id="title">Connecting to TV...</h1>
   <p id="msg">Sending authorization to your TV.</p>
 </div>
+<!--
+  Relay strategy: Submit a hidden form to the TV's HTTP server.
+  Form submissions from HTTPS → HTTP are allowed by browsers (they show
+  a brief "leaving secure site" interstitial but proceed), unlike fetch()
+  and window.location.href which are blocked by mixed content policy.
+-->
+<form id="relayForm" method="GET" style="display:none">
+</form>
 <script>
 (function() {
   var params = new URLSearchParams(window.location.search);
@@ -42,13 +50,13 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
   var randomToken = state.substring(0, colonIdx);
   var tvUrlEncoded = state.substring(colonIdx + 1);
 
-  // Decode base64url → TV's LAN callback URL
+  // Decode base64url -> TV's LAN callback URL
   var tvUrl;
   try {
     var b64 = tvUrlEncoded.replace(/-/g, '+').replace(/_/g, '/');
     tvUrl = atob(b64);
   } catch (e) {
-    show('Decode error', 'Could not decode TV address.', true);
+    show('Decode error', 'Could not decode TV address: ' + e.message, true);
     return;
   }
 
@@ -57,11 +65,25 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
     return;
   }
 
-  // Redirect the browser directly to the TV's HTTP server.
-  // Unlike fetch(), a full page navigation from HTTPS → HTTP is allowed by browsers.
-  // The TV's server will show the "Authorized!" success page.
-  var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
-  window.location.href = relayUrl;
+  // Build the relay URL and try multiple methods to reach the TV
+
+  // Method 1: Hidden form submission (most reliable HTTPS → HTTP)
+  var form = document.getElementById('relayForm');
+  form.action = tvUrl;
+
+  var codeInput = document.createElement('input');
+  codeInput.type = 'hidden';
+  codeInput.name = 'code';
+  codeInput.value = code;
+  form.appendChild(codeInput);
+
+  var stateInput = document.createElement('input');
+  stateInput.type = 'hidden';
+  stateInput.name = 'state';
+  stateInput.value = randomToken;
+  form.appendChild(stateInput);
+
+  form.submit();
 })();
 
 function show(title, msg, isError) {
