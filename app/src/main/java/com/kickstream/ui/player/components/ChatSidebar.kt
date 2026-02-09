@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
@@ -38,6 +39,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
+import com.kickstream.R
 import com.kickstream.data.chat.ChatSegment
 import com.kickstream.data.chat.ParsedChatMessage
 import com.kickstream.ui.theme.OnDarkSurface
@@ -51,27 +53,20 @@ private val ChatDivider = Color(0xFF2A2A2D)
 private val EmoteSizeSp = 20.sp
 private val MessageFontSize = 14.sp
 private val MessageLineHeight = 22.sp
-private val BadgeFontSize = 10.sp
+private val BadgeSizeSp = 16.sp
 
-// Badge colors matching Kick's native palette
-private val ModeratorColor = Color(0xFF00B300) // Green sword
-private val VipColor = Color(0xFFE91CFF)        // Purple diamond
-private val SubscriberColor = Color(0xFF53FC18)  // Kick green
-private val FounderColor = Color(0xFFFFD700)     // Gold
-private val VerifiedColor = Color(0xFF1DA1F2)    // Blue check
-private val OwnerColor = Color(0xFFFF3B3B)       // Red crown
-
-/** Map badge type string → display label + color */
-private fun badgeInfo(type: String): Pair<String, Color>? = when (type.lowercase()) {
-    "moderator" -> "MOD" to ModeratorColor
-    "vip" -> "VIP" to VipColor
-    "subscriber" -> "SUB" to SubscriberColor
-    "founder" -> "FOUNDER" to FounderColor
-    "verified" -> "✓" to VerifiedColor
-    "broadcaster", "owner" -> "OWNER" to OwnerColor
-    "og" -> "OG" to FounderColor
-    "sub_gifter" -> "GIFTER" to SubscriberColor
-    else -> null // Unknown badge types are silently skipped
+/** Map badge type string → drawable resource ID */
+private fun badgeDrawable(type: String): Int? = when (type.lowercase()) {
+    "moderator" -> R.drawable.ic_badge_moderator
+    "vip" -> R.drawable.ic_badge_vip
+    "subscriber" -> R.drawable.ic_badge_subscriber
+    "founder" -> R.drawable.ic_badge_founder
+    "verified" -> R.drawable.ic_badge_verified
+    "broadcaster", "owner" -> R.drawable.ic_badge_broadcaster
+    "og" -> R.drawable.ic_badge_og
+    "staff" -> R.drawable.ic_badge_staff
+    "sub_gifter" -> R.drawable.ic_badge_gifter
+    else -> null
 }
 
 @Composable
@@ -161,20 +156,25 @@ private fun ChatMessageRow(message: ParsedChatMessage) {
     val inlineContent = mutableMapOf<String, InlineTextContent>()
 
     val annotatedText = buildAnnotatedString {
-        // Badges (before username)
+        // Badges (before username) — rendered as inline icons
         message.badges.forEach { badgeType ->
-            val info = badgeInfo(badgeType) ?: return@forEach
-            val (label, color) = info
-            withStyle(
-                SpanStyle(
-                    color = color,
-                    fontSize = BadgeFontSize,
-                    fontWeight = FontWeight.Bold,
-                    background = color.copy(alpha = 0.15f),
+            val drawableRes = badgeDrawable(badgeType) ?: return@forEach
+            val badgeId = "badge_${badgeType}_${inlineContent.size}"
+            inlineContent[badgeId] = InlineTextContent(
+                placeholder = Placeholder(
+                    width = BadgeSizeSp,
+                    height = BadgeSizeSp,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
                 ),
             ) {
-                append(" $label ")
+                androidx.compose.foundation.Image(
+                    painter = painterResource(id = drawableRes),
+                    contentDescription = badgeType,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
             }
+            appendInlineContent(badgeId, "[$badgeType]")
             append(" ")
         }
 

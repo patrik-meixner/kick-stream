@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VIP badge: purple diamond -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Diamond shape -->
+    <path
+        android:fillColor="#E91CFF"
+        android:pathData="M12,2L2,12l10,10 10,-10L12,2z" />
+    <!-- Star center -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,7l1.5,3 3.5,0.5 -2.5,2.5 0.5,3.5 -3,-1.5 -3,1.5 0.5,-3.5 -2.5,-2.5 3.5,-0.5z" />
+</vector>

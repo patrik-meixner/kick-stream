@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Founder badge: gold badge with F -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Hexagon background -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M12,2L4,7v10l8,5 8,-5V7z" />
+    <!-- F letter -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M9,7h6v2h-4v2h3v2h-3v4h-2z" />
+</vector>

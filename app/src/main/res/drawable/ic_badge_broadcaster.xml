@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Broadcaster/Owner badge: red crown -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Crown shape -->
+    <path
+        android:fillColor="#FF3B3B"
+        android:pathData="M5,16L3,5l5.5,5L12,4l3.5,6L21,5l-2,11H5z" />
+    <!-- Crown base -->
+    <path
+        android:fillColor="#FF3B3B"
+        android:pathData="M5,17h14v2H5z" />
+</vector>
