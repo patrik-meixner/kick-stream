@@ -230,13 +230,19 @@ private fun KickAuthWebView(
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
+                    // Enable hardware acceleration for WebGL (needed by Kick's Kasada bot protection)
+                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
+                    settings.databaseEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    settings.mixedContentMode =
+                        android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     settings.userAgentString =
-                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-                            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                        "Mozilla/5.0 (Linux; Android 14; Chromecast HD) " +
+                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                            "Chrome/131.0.0.0 Safari/537.36"
 
                     webChromeClient = WebChromeClient()
 

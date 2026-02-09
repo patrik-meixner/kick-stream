@@ -7,11 +7,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
@@ -22,7 +32,9 @@ import com.kickstream.ui.theme.OnDarkSurface
 import com.kickstream.ui.theme.OnDarkSurfaceVariant
 
 /**
- * TV-friendly search bar with dark background and green cursor.
+ * TV-friendly search bar that allows D-pad navigation out of the text field.
+ * Up/Down arrow keys move focus to adjacent items instead of being consumed.
+ * Back key clears the query first, then moves focus up.
  */
 @Composable
 fun SearchBar(
@@ -31,6 +43,8 @@ fun SearchBar(
     modifier: Modifier = Modifier,
     placeholder: String = "Search streams...",
 ) {
+    val focusManager = LocalFocusManager.current
+
     BasicTextField(
         value = query,
         onValueChange = onQueryChanged,
@@ -40,6 +54,10 @@ fun SearchBar(
         ),
         cursorBrush = SolidColor(KickGreen),
         singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(
+            onSearch = { focusManager.moveFocus(FocusDirection.Down) },
+        ),
         decorationBox = { innerTextField ->
             Row(
                 modifier = Modifier
@@ -60,6 +78,33 @@ fun SearchBar(
                 }
             }
         },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionDown -> {
+                            focusManager.moveFocus(FocusDirection.Down)
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            focusManager.moveFocus(FocusDirection.Up)
+                            true
+                        }
+                        Key.Back -> {
+                            if (query.isNotEmpty()) {
+                                onQueryChanged("")
+                                true
+                            } else {
+                                focusManager.moveFocus(FocusDirection.Up)
+                                true
+                            }
+                        }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            },
     )
 }

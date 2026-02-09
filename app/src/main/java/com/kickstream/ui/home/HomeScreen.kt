@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kickstream.R
@@ -97,11 +99,14 @@ fun HomeScreen(
                             modifier = Modifier.height(36.dp),
                             contentScale = ContentScale.Fit,
                         )
-                        Button(
+                        IconButton(
                             onClick = { viewModel.logout(onLogoutComplete = onLogout) },
                             enabled = !uiState.isLoggingOut,
                         ) {
-                            Text(if (uiState.isLoggingOut) "Logging out..." else "Log out")
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_logout),
+                                contentDescription = "Log out",
+                            )
                         }
                     }
                 }

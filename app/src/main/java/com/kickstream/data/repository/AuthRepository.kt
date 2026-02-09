@@ -257,14 +257,15 @@ class AuthRepository(
                 Log.d(TAG, "Emulator detected, using configured host: $emulatorHost")
                 emulatorHost
             } else {
-                Log.w(TAG, "Emulator detected but KICK_EMULATOR_HOST not set, using loopback")
-                "127.0.0.1"
+                throw IllegalStateException(
+                    "Emulator detected but kick.emulator.host not set in local.properties. " +
+                        "Set it to your dev machine's LAN IP and run: adb forward tcp:8374 tcp:8374",
+                )
             }
         } else {
-            getDeviceLanIp() ?: run {
-                Log.w(TAG, "Could not detect LAN IP, falling back to loopback")
-                "127.0.0.1"
-            }
+            getDeviceLanIp() ?: throw IllegalStateException(
+                "No network connection detected. Connect to WiFi to use QR code login.",
+            )
         }
         return "http://$host:$PORT/callback"
     }
