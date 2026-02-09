@@ -6,24 +6,33 @@
 <title>KickStream Auth</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0E0E10;color:#EFEFF1;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
-.card{text-align:center;padding:2rem;max-width:400px}
+body{background:#0E0E10;color:#EFEFF1;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.card{text-align:center;padding:2rem;max-width:420px}
 h1{color:#53FC18;font-size:1.5rem;margin-bottom:.5rem}
 p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
 .err{color:#EB0400}
-.btn{display:inline-block;background:#53FC18;color:#0E0E10;font-size:1.1rem;font-weight:700;padding:.8rem 2rem;border-radius:8px;text-decoration:none;margin-top:1rem;transition:background .2s}
-.btn:active{background:#3ecc10}
+.code-box{background:#1a1a1e;border:2px solid #53FC18;border-radius:12px;padding:1.2rem;margin:1rem 0;font-family:'SF Mono',Menlo,Consolas,monospace}
+.code-label{font-size:.75rem;color:#ADADB1;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem}
+.code-value{font-size:1.4rem;color:#EFEFF1;word-break:break-all;letter-spacing:.05em;user-select:all;-webkit-user-select:all}
+.copy-btn{background:#333;color:#EFEFF1;border:1px solid #555;font-size:.85rem;padding:.5rem 1.2rem;border-radius:6px;margin-top:.8rem;cursor:pointer;transition:background .2s}
+.copy-btn:active{background:#53FC18;color:#0E0E10}
 .sub{font-size:.75rem;color:#666;margin-top:1rem}
 </style>
 </head>
 <body>
 <div class="card" id="card">
   <h1 id="title">Authorized!</h1>
-  <p id="msg">Tap the button below to send the code to your TV.</p>
-  <a id="relayLink" class="btn" href="#">Send to TV</a>
-  <p class="sub" id="sub">Make sure your phone is on the same Wi-Fi as your TV.</p>
+  <p id="msg">Enter this code on your TV to complete sign-in.</p>
+  <div class="code-box" id="codeBox" style="display:none">
+    <div class="code-label">Your login code</div>
+    <div class="code-value" id="codeDisplay"></div>
+    <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy to clipboard</button>
+  </div>
+  <p class="sub" id="sub">This code expires in 5 minutes.</p>
 </div>
 <script>
+var authCode = '';
+
 (function() {
   var params = new URLSearchParams(window.location.search);
   var code = params.get('code');
@@ -34,44 +43,36 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
     return;
   }
 
-  // State format: "<random_token>:<base64url_encoded_tv_callback_url>"
-  var colonIdx = state.indexOf(':');
-  if (colonIdx === -1) {
-    show('Invalid state', 'Could not decode TV address.', true);
-    return;
-  }
+  authCode = code;
 
-  var randomToken = state.substring(0, colonIdx);
-  var tvUrlEncoded = state.substring(colonIdx + 1);
-
-  // Decode base64url -> TV's LAN callback URL
-  var tvUrl;
-  try {
-    var b64 = tvUrlEncoded.replace(/-/g, '+').replace(/_/g, '/');
-    tvUrl = atob(b64);
-  } catch (e) {
-    show('Decode error', 'Could not decode TV address: ' + e.message, true);
-    return;
-  }
-
-  if (!tvUrl) {
-    show('No TV address', 'Could not find TV callback URL.', true);
-    return;
-  }
-
-  // Build the full callback URL with code and state params
-  var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
-
-  // Set the link href — user taps to navigate (user-initiated HTTP is allowed)
-  var link = document.getElementById('relayLink');
-  link.href = relayUrl;
+  // Display the authorization code for manual entry on the TV
+  document.getElementById('codeDisplay').textContent = code;
+  document.getElementById('codeBox').style.display = 'block';
 })();
+
+function copyCode() {
+  if (!authCode) return;
+  navigator.clipboard.writeText(authCode).then(function() {
+    document.getElementById('copyBtn').textContent = 'Copied!';
+    setTimeout(function() {
+      document.getElementById('copyBtn').textContent = 'Copy to clipboard';
+    }, 2000);
+  }).catch(function() {
+    // Fallback: select the text
+    var el = document.getElementById('codeDisplay');
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+}
 
 function show(title, msg, isError) {
   document.getElementById('title').textContent = title;
   document.getElementById('title').className = isError ? 'err' : '';
   document.getElementById('msg').textContent = msg;
-  document.getElementById('relayLink').style.display = 'none';
+  document.getElementById('codeBox').style.display = 'none';
   document.getElementById('sub').style.display = 'none';
 }
 </script>
