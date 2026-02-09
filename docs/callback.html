@@ -7,28 +7,43 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0E0E10;color:#EFEFF1;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.card{text-align:center;padding:2rem;max-width:420px}
+.card{text-align:center;padding:2rem;max-width:480px}
 h1{color:#53FC18;font-size:1.5rem;margin-bottom:.5rem}
 p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
 .err{color:#EB0400}
-.code-box{background:#1a1a1e;border:2px solid #53FC18;border-radius:12px;padding:1.2rem;margin:1rem 0;font-family:'SF Mono',Menlo,Consolas,monospace}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid #333;border-top-color:#53FC18;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.code-box{background:#1a1a1e;border:2px solid #53FC18;border-radius:12px;padding:1.2rem;margin:1rem 0;font-family:'SF Mono',Menlo,Consolas,monospace;display:none}
 .code-label{font-size:.75rem;color:#ADADB1;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem}
-.code-value{font-size:1.4rem;color:#EFEFF1;word-break:break-all;letter-spacing:.05em;user-select:all;-webkit-user-select:all}
+.code-value{font-size:1.1rem;color:#EFEFF1;word-break:break-all;letter-spacing:.05em;user-select:all;-webkit-user-select:all}
 .copy-btn{background:#333;color:#EFEFF1;border:1px solid #555;font-size:.85rem;padding:.5rem 1.2rem;border-radius:6px;margin-top:.8rem;cursor:pointer;transition:background .2s}
 .copy-btn:active{background:#53FC18;color:#0E0E10}
 .sub{font-size:.75rem;color:#666;margin-top:1rem}
+#redirect-status{display:block}
+#fallback{display:none}
 </style>
 </head>
 <body>
-<div class="card" id="card">
-  <h1 id="title">Authorized!</h1>
-  <p id="msg">Enter this code on your TV to complete sign-in.</p>
-  <div class="code-box" id="codeBox" style="display:none">
-    <div class="code-label">Your login code</div>
-    <div class="code-value" id="codeDisplay"></div>
-    <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy to clipboard</button>
+<div class="card">
+  <div id="redirect-status">
+    <div class="spinner"></div>
+    <h1>Redirecting to your TV...</h1>
+    <p>Please wait while we connect to your TV.</p>
   </div>
-  <p class="sub" id="sub">This code expires in 5 minutes.</p>
+  <div id="fallback">
+    <h1 id="title">Could not reach your TV</h1>
+    <p id="msg">On your TV, select "Enter code manually" and enter this code:</p>
+    <div class="code-box" id="codeBox">
+      <div class="code-label">Your login code</div>
+      <div class="code-value" id="codeDisplay"></div>
+      <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy to clipboard</button>
+    </div>
+    <p class="sub">Make sure your phone and TV are on the same WiFi network.</p>
+  </div>
+  <div id="error" style="display:none">
+    <h1 class="err" id="errTitle">Error</h1>
+    <p id="errMsg"></p>
+  </div>
 </div>
 <script>
 var authCode = '';
@@ -39,16 +54,65 @@ var authCode = '';
   var state = params.get('state');
 
   if (!code || !state) {
-    show('Missing parameters', 'Could not complete authorization.', true);
+    showError('Missing parameters', 'Could not complete authorization. No code or state received.');
     return;
   }
 
   authCode = code;
 
-  // Display the authorization code for manual entry on the TV
+  // Decode TV callback URL from state: "<random_token>:<base64url(tv_url)>"
+  var colonIdx = state.indexOf(':');
+  if (colonIdx === -1) {
+    showFallback(code);
+    return;
+  }
+
+  var randomToken = state.substring(0, colonIdx);
+  var tvUrlEncoded = state.substring(colonIdx + 1);
+
+  var tvUrl;
+  try {
+    // Convert base64url to standard base64
+    var b64 = tvUrlEncoded.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    while (b64.length % 4 !== 0) b64 += '=';
+    tvUrl = atob(b64);
+  } catch (e) {
+    showFallback(code);
+    return;
+  }
+
+  if (!tvUrl || !tvUrl.startsWith('http://')) {
+    showFallback(code);
+    return;
+  }
+
+  // Build relay URL with code and the random token as state
+  var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
+
+  // Attempt top-level navigation to TV's HTTP server
+  window.location.href = relayUrl;
+
+  // If still here after 3 seconds, the redirect was blocked
+  setTimeout(function() {
+    showFallback(code);
+  }, 3000);
+})();
+
+function showFallback(code) {
+  document.getElementById('redirect-status').style.display = 'none';
+  document.getElementById('fallback').style.display = 'block';
   document.getElementById('codeDisplay').textContent = code;
   document.getElementById('codeBox').style.display = 'block';
-})();
+}
+
+function showError(title, msg) {
+  document.getElementById('redirect-status').style.display = 'none';
+  document.getElementById('fallback').style.display = 'none';
+  document.getElementById('error').style.display = 'block';
+  document.getElementById('errTitle').textContent = title;
+  document.getElementById('errMsg').textContent = msg;
+}
 
 function copyCode() {
   if (!authCode) return;
@@ -58,7 +122,6 @@ function copyCode() {
       document.getElementById('copyBtn').textContent = 'Copy to clipboard';
     }, 2000);
   }).catch(function() {
-    // Fallback: select the text
     var el = document.getElementById('codeDisplay');
     var range = document.createRange();
     range.selectNodeContents(el);
@@ -66,14 +129,6 @@ function copyCode() {
     sel.removeAllRanges();
     sel.addRange(range);
   });
-}
-
-function show(title, msg, isError) {
-  document.getElementById('title').textContent = title;
-  document.getElementById('title').className = isError ? 'err' : '';
-  document.getElementById('msg').textContent = msg;
-  document.getElementById('codeBox').style.display = 'none';
-  document.getElementById('sub').style.display = 'none';
 }
 </script>
 </body>
