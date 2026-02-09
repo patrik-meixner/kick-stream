@@ -1,7 +1,6 @@
 package com.kickstream.ui.login
 
 import android.app.Application
-import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -54,17 +53,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun checkExistingToken() {
-        // Skip login entirely on emulator for faster development testing
-        if (isEmulator()) {
-            Log.d(TAG, "Emulator detected — skipping login")
-            _uiState.value = LoginUiState(
-                isCheckingToken = false,
-                isAlreadyLoggedIn = true,
-                isSuccess = true,
-            )
-            return
-        }
-
         viewModelScope.launch {
             val loggedIn = authRepository.isLoggedIn()
             if (loggedIn) {
@@ -80,14 +68,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    private fun isEmulator(): Boolean =
-        Build.FINGERPRINT.startsWith("generic") ||
-            Build.FINGERPRINT.startsWith("unknown") ||
-            Build.MODEL.contains("Emulator") ||
-            Build.MODEL.contains("Android SDK built for x86") ||
-            Build.PRODUCT.contains("sdk") ||
-            Build.PRODUCT.contains("emulator")
 
     /** Start the QR code + HTTP server flow (primary). */
     fun startAuthFlow() {

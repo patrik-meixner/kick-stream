@@ -23,6 +23,9 @@ import kotlinx.coroutines.launch
 data class PlayerUiState(
     val isLoading: Boolean = true,
     val channelName: String = "",
+    val streamTitle: String? = null,
+    val viewerCount: Int = 0,
+    val categoryName: String? = null,
     val hlsUrl: String? = null,
     val chatroomId: Int? = null,
     val chatMessages: List<ParsedChatMessage> = emptyList(),
@@ -89,6 +92,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     Log.w(TAG, "Failed to get unofficial data: ${e.message}", e)
                 }
 
+                val streamTitle = channel?.streamTitle
+                val viewerCount = channel?.stream?.viewerCount ?: 0
+                val categoryName = channel?.category?.name
+
                 if (hlsUrl.isNullOrBlank() && channel?.stream?.isLive != true) {
                     Log.w(TAG, "No HLS URL and not live -- showing error")
                     _uiState.value = PlayerUiState(
@@ -104,6 +111,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = PlayerUiState(
                     isLoading = false,
                     channelName = slug,
+                    streamTitle = streamTitle,
+                    viewerCount = viewerCount,
+                    categoryName = categoryName,
                     hlsUrl = hlsUrl,
                     chatroomId = chatroomId,
                     isFollowed = isFollowed,
