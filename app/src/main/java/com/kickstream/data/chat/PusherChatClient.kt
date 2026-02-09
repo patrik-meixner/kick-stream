@@ -34,7 +34,19 @@ class PusherChatClient {
     private var currentChannel: Channel? = null
 
     private fun connect() {
-        if (pusher != null) return
+        val existing = pusher
+        if (existing != null) {
+            val state = existing.connection?.state
+            if (state == ConnectionState.CONNECTED || state == ConnectionState.CONNECTING) {
+                return // Already alive
+            }
+            // Zombie: object exists but connection is dead — tear down and recreate
+            Log.w(TAG, "Pusher zombie detected (state=$state), reconnecting")
+            try { existing.disconnect() } catch (_: Exception) {}
+            pusher = null
+            currentChannel = null
+        }
+
         val options = PusherOptions().apply {
             setCluster(PUSHER_CLUSTER)
         }

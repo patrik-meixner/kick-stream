@@ -8,10 +8,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -26,33 +28,58 @@ fun VideoPlayer(
 ) {
     val context = LocalContext.current
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-            repeatMode = Player.REPEAT_MODE_OFF
-            addListener(object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} -- ${error.message}", error)
-                }
+    // Shared data source factory — reused across HLS URL changes
+    val dataSourceFactory = remember { DefaultHttpDataSource.Factory() }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    val state = when (playbackState) {
-                        Player.STATE_IDLE -> "IDLE"
-                        Player.STATE_BUFFERING -> "BUFFERING"
-                        Player.STATE_READY -> "READY"
-                        Player.STATE_ENDED -> "ENDED"
-                        else -> "UNKNOWN($playbackState)"
+    val exoPlayer = remember {
+        // Tuned buffer for live HLS on TV:
+        // - Small back-buffer (5s) to prevent unbounded memory growth
+        // - Moderate forward buffer to stay responsive on limited TV hardware
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs */ 15_000,
+                /* maxBufferMs */ 30_000,
+                /* bufferForPlaybackMs */ 2_500,
+                /* bufferForPlaybackAfterRebufferMs */ 5_000,
+            )
+            .setBackBuffer(
+                /* backBufferDurationMs */ 5_000,
+                /* retainBackBufferFromKeyframe */ false,
+            )
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .build()
+            .apply {
+                playWhenReady = true
+                repeatMode = Player.REPEAT_MODE_OFF
+                // For live streams, stay near the live edge
+                setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+                videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} -- ${error.message}", error)
                     }
-                    Log.d(TAG, "ExoPlayer state: $state")
-                }
-            })
-        }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        val state = when (playbackState) {
+                            Player.STATE_IDLE -> "IDLE"
+                            Player.STATE_BUFFERING -> "BUFFERING"
+                            Player.STATE_READY -> "READY"
+                            Player.STATE_ENDED -> "ENDED"
+                            else -> "UNKNOWN($playbackState)"
+                        }
+                        Log.d(TAG, "ExoPlayer state: $state")
+                    }
+                })
+            }
     }
 
     LaunchedEffect(hlsUrl) {
         Log.d(TAG, "ExoPlayer loading HLS URL: $hlsUrl")
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
         val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+            .setAllowChunklessPreparation(true)
             .createMediaSource(MediaItem.fromUri(hlsUrl))
         exoPlayer.setMediaSource(hlsSource)
         exoPlayer.prepare()

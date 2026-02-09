@@ -40,6 +40,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TAG = "KickStream"
         private const val CONTROLS_AUTO_HIDE_MS = 3000L
+        private const val CHAT_FLUSH_INTERVAL_MS = 100L // Emit chat updates at most 10x/sec
     }
 
     private val tokenStore = TokenStore(application)
@@ -57,6 +58,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val chatBuffer = ArrayDeque<ParsedChatMessage>(maxChatMessages)
     private var emoteMap: Map<String, Emote> = emptyMap()
     private var controlsHideJob: Job? = null
+    private var chatJob: Job? = null
+    private var chatFlushJob: Job? = null
+    @Volatile private var chatDirty = false
     private var currentSlug: String = ""
     private var currentKickUserId: Int = 0
 
@@ -163,18 +167,34 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         chatBuffer.clear()
         chatBuffer.addAll(reparsed)
-        _uiState.value = _uiState.value.copy(chatMessages = chatBuffer.toList())
+        chatDirty = true
     }
 
     private fun subscribeToChatroom(chatroomId: Int) {
-        viewModelScope.launch {
+        // Cancel any previous chat subscription
+        chatJob?.cancel()
+        chatFlushJob?.cancel()
+
+        // Periodic flush: emit buffered messages to UI at a fixed rate
+        // instead of on every single message (prevents excessive recomposition)
+        chatFlushJob = viewModelScope.launch {
+            while (true) {
+                delay(CHAT_FLUSH_INTERVAL_MS)
+                if (chatDirty) {
+                    chatDirty = false
+                    _uiState.value = _uiState.value.copy(chatMessages = chatBuffer.toList())
+                }
+            }
+        }
+
+        chatJob = viewModelScope.launch {
             chatRepository.getChatMessages(chatroomId).collect { message ->
                 val parsed = EmoteParser.parseMessage(message, emoteMap)
                 chatBuffer.addLast(parsed)
                 if (chatBuffer.size > maxChatMessages) {
                     chatBuffer.removeFirst()
                 }
-                _uiState.value = _uiState.value.copy(chatMessages = chatBuffer.toList())
+                chatDirty = true
             }
         }
     }
@@ -203,6 +223,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         super.onCleared()
+        chatJob?.cancel()
+        chatFlushJob?.cancel()
         chatRepository.disconnect()
     }
 }

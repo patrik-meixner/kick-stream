@@ -51,6 +51,28 @@ private val ChatDivider = Color(0xFF2A2A2D)
 private val EmoteSizeSp = 20.sp
 private val MessageFontSize = 14.sp
 private val MessageLineHeight = 22.sp
+private val BadgeFontSize = 10.sp
+
+// Badge colors matching Kick's native palette
+private val ModeratorColor = Color(0xFF00B300) // Green sword
+private val VipColor = Color(0xFFE91CFF)        // Purple diamond
+private val SubscriberColor = Color(0xFF53FC18)  // Kick green
+private val FounderColor = Color(0xFFFFD700)     // Gold
+private val VerifiedColor = Color(0xFF1DA1F2)    // Blue check
+private val OwnerColor = Color(0xFFFF3B3B)       // Red crown
+
+/** Map badge type string → display label + color */
+private fun badgeInfo(type: String): Pair<String, Color>? = when (type.lowercase()) {
+    "moderator" -> "MOD" to ModeratorColor
+    "vip" -> "VIP" to VipColor
+    "subscriber" -> "SUB" to SubscriberColor
+    "founder" -> "FOUNDER" to FounderColor
+    "verified" -> "✓" to VerifiedColor
+    "broadcaster", "owner" -> "OWNER" to OwnerColor
+    "og" -> "OG" to FounderColor
+    "sub_gifter" -> "GIFTER" to SubscriberColor
+    else -> null // Unknown badge types are silently skipped
+}
 
 @Composable
 fun ChatSidebar(
@@ -139,6 +161,23 @@ private fun ChatMessageRow(message: ParsedChatMessage) {
     val inlineContent = mutableMapOf<String, InlineTextContent>()
 
     val annotatedText = buildAnnotatedString {
+        // Badges (before username)
+        message.badges.forEach { badgeType ->
+            val info = badgeInfo(badgeType) ?: return@forEach
+            val (label, color) = info
+            withStyle(
+                SpanStyle(
+                    color = color,
+                    fontSize = BadgeFontSize,
+                    fontWeight = FontWeight.Bold,
+                    background = color.copy(alpha = 0.15f),
+                ),
+            ) {
+                append(" $label ")
+            }
+            append(" ")
+        }
+
         // Username
         withStyle(SpanStyle(color = userColor, fontWeight = FontWeight.Bold)) {
             append("${message.username}: ")
