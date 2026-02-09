@@ -7,28 +7,22 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0E0E10;color:#EFEFF1;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
-.card{text-align:center;padding:2rem}
+.card{text-align:center;padding:2rem;max-width:400px}
 h1{color:#53FC18;font-size:1.5rem;margin-bottom:.5rem}
 p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
-.spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#53FC18;border-radius:50%;animation:spin .8s linear infinite;margin:1rem auto}
-@keyframes spin{to{transform:rotate(360deg)}}
 .err{color:#EB0400}
+.btn{display:inline-block;background:#53FC18;color:#0E0E10;font-size:1.1rem;font-weight:700;padding:.8rem 2rem;border-radius:8px;text-decoration:none;margin-top:1rem;transition:background .2s}
+.btn:active{background:#3ecc10}
+.sub{font-size:.75rem;color:#666;margin-top:1rem}
 </style>
 </head>
 <body>
 <div class="card" id="card">
-  <div class="spinner" id="spinner"></div>
-  <h1 id="title">Connecting to TV...</h1>
-  <p id="msg">Sending authorization to your TV.</p>
+  <h1 id="title">Authorized!</h1>
+  <p id="msg">Tap the button below to send the code to your TV.</p>
+  <a id="relayLink" class="btn" href="#">Send to TV</a>
+  <p class="sub" id="sub">Make sure your phone is on the same Wi-Fi as your TV.</p>
 </div>
-<!--
-  Relay strategy: Submit a hidden form to the TV's HTTP server.
-  Form submissions from HTTPS → HTTP are allowed by browsers (they show
-  a brief "leaving secure site" interstitial but proceed), unlike fetch()
-  and window.location.href which are blocked by mixed content policy.
--->
-<form id="relayForm" method="GET" style="display:none">
-</form>
 <script>
 (function() {
   var params = new URLSearchParams(window.location.search);
@@ -65,32 +59,20 @@ p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
     return;
   }
 
-  // Build the relay URL and try multiple methods to reach the TV
+  // Build the full callback URL with code and state params
+  var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
 
-  // Method 1: Hidden form submission (most reliable HTTPS → HTTP)
-  var form = document.getElementById('relayForm');
-  form.action = tvUrl;
-
-  var codeInput = document.createElement('input');
-  codeInput.type = 'hidden';
-  codeInput.name = 'code';
-  codeInput.value = code;
-  form.appendChild(codeInput);
-
-  var stateInput = document.createElement('input');
-  stateInput.type = 'hidden';
-  stateInput.name = 'state';
-  stateInput.value = randomToken;
-  form.appendChild(stateInput);
-
-  form.submit();
+  // Set the link href — user taps to navigate (user-initiated HTTP is allowed)
+  var link = document.getElementById('relayLink');
+  link.href = relayUrl;
 })();
 
 function show(title, msg, isError) {
-  document.getElementById('spinner').style.display = 'none';
   document.getElementById('title').textContent = title;
   document.getElementById('title').className = isError ? 'err' : '';
   document.getElementById('msg').textContent = msg;
+  document.getElementById('relayLink').style.display = 'none';
+  document.getElementById('sub').style.display = 'none';
 }
 </script>
 </body>
