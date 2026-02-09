@@ -2,13 +2,14 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Simple green play triangle on dark background -->
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Dark background -->
     <path
         android:fillColor="#0E0E10"
-        android:pathData="M0,0h108v108H0z" />
+        android:pathData="M0,0h512v512H0z" />
+    <!-- Kick K mark -->
     <path
         android:fillColor="#53FC18"
-        android:pathData="M38,28L38,80L80,54Z" />
+        android:pathData="M37,0.036h164.448v113.621h54.71v-56.82h54.731V0.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V0.036z" />
 </vector>

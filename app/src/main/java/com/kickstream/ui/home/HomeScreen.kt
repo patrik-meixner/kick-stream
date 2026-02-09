@@ -1,9 +1,11 @@
 package com.kickstream.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,12 +21,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.kickstream.R
 import com.kickstream.ui.home.components.FollowedChannelCard
 import com.kickstream.ui.home.components.LiveChannelCard
 import com.kickstream.ui.home.components.SearchBar
@@ -32,6 +37,7 @@ import com.kickstream.ui.home.components.SearchBar
 @Composable
 fun HomeScreen(
     onChannelSelected: (String) -> Unit,
+    onLogout: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -76,6 +82,30 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // 0. Header: KICK logo + Logout button
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.kick_wordmark),
+                            contentDescription = "Kick",
+                            modifier = Modifier.height(36.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                        Button(
+                            onClick = { viewModel.logout(onLogoutComplete = onLogout) },
+                            enabled = !uiState.isLoggingOut,
+                        ) {
+                            Text(if (uiState.isLoggingOut) "Logging out..." else "Log out")
+                        }
+                    }
+                }
+
                 // 1. Search bar (full-width)
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SearchBar(

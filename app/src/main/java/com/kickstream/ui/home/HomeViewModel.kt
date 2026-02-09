@@ -8,6 +8,7 @@ import com.kickstream.data.api.NetworkModule
 import com.kickstream.data.api.model.LivestreamData
 import com.kickstream.data.local.FavoritesStore
 import com.kickstream.data.local.TokenStore
+import com.kickstream.data.repository.AuthRepository
 import com.kickstream.data.repository.ChannelRepository
 import com.kickstream.data.repository.FollowRepository
 import com.kickstream.data.repository.FollowedChannel
@@ -23,6 +24,7 @@ data class HomeUiState(
     val followedChannels: List<FollowedChannel> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<LivestreamData>? = null, // null = no active search
+    val isLoggingOut: Boolean = false,
     val error: String? = null,
 )
 
@@ -36,6 +38,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val favoritesStore = FavoritesStore(application)
     private val kickApi = NetworkModule.provideKickApi(tokenStore)
     private val unofficialApi = NetworkModule.provideAuthenticatedUnofficialApi(tokenStore)
+    private val authApi = NetworkModule.provideAuthApi()
+    private val authRepository = AuthRepository(authApi, tokenStore)
     private val channelRepository = ChannelRepository(kickApi)
     private val followRepository = FollowRepository(
         unofficialApi = unofficialApi,
@@ -121,4 +125,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refresh() = loadData()
+
+    fun logout(onLogoutComplete: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoggingOut = true)
+            try {
+                authRepository.logout()
+            } catch (_: Exception) { }
+            onLogoutComplete()
+        }
+    }
 }

@@ -41,6 +41,11 @@ fun AppNavigation() {
                 onChannelSelected = { slug ->
                     navController.navigate(Routes.player(slug))
                 },
+                onLogout = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.HOME) { inclusive = true }
+                    }
+                },
             )
         }
 
