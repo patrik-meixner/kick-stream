@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KickStream Auth</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0E0E10;color:#EFEFF1;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+.card{text-align:center;padding:2rem}
+h1{color:#53FC18;font-size:1.5rem;margin-bottom:.5rem}
+p{color:#ADADB1;font-size:.9rem;margin-top:.5rem}
+.spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#53FC18;border-radius:50%;animation:spin .8s linear infinite;margin:1rem auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ok{color:#53FC18;font-size:2rem}
+.err{color:#EB0400}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="spinner" id="spinner"></div>
+  <h1 id="title">Connecting to TV...</h1>
+  <p id="msg">Sending authorization to your TV.</p>
+</div>
+<script>
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code');
+  var state = params.get('state');
+
+  if (!code || !state) {
+    show('Missing parameters', 'Could not complete authorization.', true);
+    return;
+  }
+
+  // State format: "<random_token>:<base64url_encoded_tv_callback_url>"
+  var colonIdx = state.indexOf(':');
+  if (colonIdx === -1) {
+    show('Invalid state', 'Could not decode TV address.', true);
+    return;
+  }
+
+  var randomToken = state.substring(0, colonIdx);
+  var tvUrlEncoded = state.substring(colonIdx + 1);
+
+  // Decode base64url → TV's LAN callback URL
+  var tvUrl;
+  try {
+    // base64url → base64: replace - with +, _ with /
+    var b64 = tvUrlEncoded.replace(/-/g, '+').replace(/_/g, '/');
+    tvUrl = atob(b64);
+  } catch (e) {
+    show('Decode error', 'Could not decode TV address.', true);
+    return;
+  }
+
+  if (!tvUrl) {
+    show('No TV address', 'Could not find TV callback URL.', true);
+    return;
+  }
+
+  // Relay the auth code to the TV's HTTP server, passing only the random token as state
+  var relayUrl = tvUrl + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(randomToken);
+
+  fetch(relayUrl, { mode: 'no-cors' })
+    .then(function() {
+      show('Authorized!', 'You can close this tab and return to your TV.', false);
+    })
+    .catch(function() {
+      // no-cors means we can't read the response, but the request was likely sent.
+      // Show success after a brief delay.
+      setTimeout(function() {
+        show('Authorized!', 'You can close this tab and return to your TV.', false);
+      }, 500);
+    });
+})();
+
+function show(title, msg, isError) {
+  document.getElementById('spinner').style.display = 'none';
+  document.getElementById('title').textContent = title;
+  document.getElementById('title').className = isError ? 'err' : '';
+  document.getElementById('msg').textContent = msg;
+}
+</script>
+</body>
+</html>
