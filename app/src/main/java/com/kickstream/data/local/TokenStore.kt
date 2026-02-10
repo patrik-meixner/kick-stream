@@ -5,24 +5,27 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 private val Context.dataStore by preferencesDataStore(name = "kick_tokens")
 
 class TokenStore(private val context: Context) {
 
+    // App-lifetime scope for non-blocking cache priming (replaces GlobalScope)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     @Volatile
     private var cachedAccessToken: String? = null
 
     init {
         // Prime the token cache from DataStore on creation (non-blocking)
-        @Suppress("OPT_IN_USAGE")
-        GlobalScope.launch(Dispatchers.IO) {
+        scope.launch {
             cachedAccessToken = context.dataStore.data.first()[ACCESS_TOKEN]
         }
     }

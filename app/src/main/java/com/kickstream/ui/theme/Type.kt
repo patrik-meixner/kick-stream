@@ -33,7 +33,7 @@ val KickStreamTypography = Typography(
         letterSpacing = 0.15.sp,
     ),
     bodySmall = TextStyle(
-        fontSize = 12.sp,
+        fontSize = 13.sp,
         letterSpacing = 0.2.sp,
     ),
     labelMedium = TextStyle(
@@ -43,7 +43,7 @@ val KickStreamTypography = Typography(
     ),
     labelSmall = TextStyle(
         fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         letterSpacing = 0.5.sp,
     ),
 )

@@ -117,7 +117,7 @@ class EmoteParserTest {
             username = "testuser",
             content = "hello PepePls",
             color = "#FF0000",
-            badges = listOf("subscriber", "vip"),
+            badges = listOf(ChatBadgeInfo("subscriber"), ChatBadgeInfo("vip")),
             timestamp = "2024-01-01T00:00:00Z",
         )
         val parsed = EmoteParser.parseMessage(message, testEmotes)
@@ -125,7 +125,7 @@ class EmoteParserTest {
         assertEquals("msg-123", parsed.id)
         assertEquals("testuser", parsed.username)
         assertEquals("#FF0000", parsed.color)
-        assertEquals(listOf("subscriber", "vip"), parsed.badges)
+        assertEquals(listOf(ChatBadgeInfo("subscriber"), ChatBadgeInfo("vip")), parsed.badges)
         assertEquals("2024-01-01T00:00:00Z", parsed.timestamp)
         assertEquals(2, parsed.segments.size)
         assertEquals("hello", (parsed.segments[0] as ChatSegment.Text).text)

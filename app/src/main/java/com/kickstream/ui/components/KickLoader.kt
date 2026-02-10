@@ -40,7 +40,7 @@ fun KickLoader(modifier: Modifier = Modifier) {
     ) {
         Image(
             painter = painterResource(id = R.drawable.ic_launcher),
-            contentDescription = null,
+            contentDescription = "Loading",
             modifier = Modifier
                 .size(80.dp)
                 .alpha(alpha),

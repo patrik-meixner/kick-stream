@@ -1,5 +1,7 @@
 package com.kickstream.ui.player.components
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,24 +22,28 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
 private const val TAG = "KickStream"
+private const val MAX_RETRIES = 3
+private const val RETRY_DELAY_MS = 2000L
 
 @Composable
 fun VideoPlayer(
     hlsUrl: String,
     modifier: Modifier = Modifier,
+    onBufferingChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     // Shared data source factory — reused across HLS URL changes
     val dataSourceFactory = remember { DefaultHttpDataSource.Factory() }
 
     val exoPlayer = remember {
         // Tuned buffer for live HLS on TV:
+        // - Low minBuffer (5s) for fast start on live streams
         // - Small back-buffer (5s) to prevent unbounded memory growth
-        // - Moderate forward buffer to stay responsive on limited TV hardware
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs */ 15_000,
+                /* minBufferMs */ 5_000,
                 /* maxBufferMs */ 30_000,
                 /* bufferForPlaybackMs */ 2_500,
                 /* bufferForPlaybackAfterRebufferMs */ 5_000,
@@ -47,6 +53,8 @@ fun VideoPlayer(
                 /* retainBackBufferFromKeyframe */ false,
             )
             .build()
+
+        var retryCount = 0
 
         ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
@@ -60,6 +68,14 @@ fun VideoPlayer(
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e(TAG, "ExoPlayer error: ${error.errorCodeName} -- ${error.message}", error)
+                        // Auto-retry on error (network hiccups, transient failures)
+                        if (retryCount < MAX_RETRIES) {
+                            retryCount++
+                            Log.d(TAG, "ExoPlayer auto-retry $retryCount/$MAX_RETRIES in ${RETRY_DELAY_MS}ms")
+                            mainHandler.postDelayed({ prepare() }, RETRY_DELAY_MS)
+                        } else {
+                            Log.w(TAG, "ExoPlayer max retries reached, giving up")
+                        }
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -71,6 +87,12 @@ fun VideoPlayer(
                             else -> "UNKNOWN($playbackState)"
                         }
                         Log.d(TAG, "ExoPlayer state: $state")
+                        // Notify about buffering state for UI overlay
+                        onBufferingChanged(playbackState == Player.STATE_BUFFERING)
+                        // Reset retry counter on successful playback
+                        if (playbackState == Player.STATE_READY) {
+                            retryCount = 0
+                        }
                     }
                 })
             }
@@ -78,15 +100,26 @@ fun VideoPlayer(
 
     LaunchedEffect(hlsUrl) {
         Log.d(TAG, "ExoPlayer loading HLS URL: $hlsUrl")
+        // Configure live stream offset targets for lower latency
+        val liveConfig = MediaItem.LiveConfiguration.Builder()
+            .setTargetOffsetMs(3_000)
+            .setMinOffsetMs(2_000)
+            .setMaxOffsetMs(8_000)
+            .build()
+        val mediaItem = MediaItem.Builder()
+            .setUri(hlsUrl)
+            .setLiveConfiguration(liveConfig)
+            .build()
         val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
             .setAllowChunklessPreparation(true)
-            .createMediaSource(MediaItem.fromUri(hlsUrl))
+            .createMediaSource(mediaItem)
         exoPlayer.setMediaSource(hlsSource)
         exoPlayer.prepare()
     }
 
     DisposableEffect(Unit) {
         onDispose {
+            mainHandler.removeCallbacksAndMessages(null)
             exoPlayer.release()
         }
     }

@@ -123,10 +123,14 @@ fun PlayerScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Press Back to return",
+                            text = "The channel may not be live.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.height(24.dp))
+                        Button(onClick = { viewModel.loadChannel(channelSlug) }) {
+                            Text("Retry")
+                        }
                     }
                 }
             }
@@ -136,6 +140,7 @@ fun PlayerScreen(
                 Row(modifier = Modifier.fillMaxSize()) {
                     VideoPlayer(
                         hlsUrl = uiState.hlsUrl!!,
+                        onBufferingChanged = { viewModel.onBufferingChanged(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -272,6 +277,16 @@ fun PlayerScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Buffering indicator overlay
+                if (uiState.isBuffering) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        KickLoader()
                     }
                 }
             }

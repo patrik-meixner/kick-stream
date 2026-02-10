@@ -35,6 +35,7 @@ data class PlayerUiState(
     val isChatVisible: Boolean = true,
     val isFollowed: Boolean = false,
     val showControls: Boolean = false,
+    val isBuffering: Boolean = false,
     val error: String? = null,
 )
 
@@ -228,6 +229,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             _uiState.value = _uiState.value.copy(isFollowed = isNowFollowed)
             Log.d(TAG, "Follow toggled for $currentSlug: $isNowFollowed")
         }
+    }
+
+    fun onBufferingChanged(isBuffering: Boolean) {
+        _uiState.value = _uiState.value.copy(isBuffering = isBuffering)
     }
 
     fun showControls() {

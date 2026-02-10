@@ -38,22 +38,26 @@ object NetworkModule {
         chain.proceed(request)
     }
 
-    private fun buildOkHttpClient(tokenStore: TokenStore): OkHttpClient =
+    // Shared base client — all other clients derive from this via newBuilder()
+    // to share the connection pool and dispatcher thread pool
+    private val baseClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun buildOkHttpClient(tokenStore: TokenStore): OkHttpClient =
+        baseClient.newBuilder()
             .addInterceptor(jsonAcceptInterceptor)
             .addInterceptor(authInterceptor(tokenStore))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             })
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
             .build()
 
     private val authOkHttp: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
+        baseClient.newBuilder().build()
     }
 
     private val converterFactory by lazy {
@@ -77,19 +81,19 @@ object NetworkModule {
             .create(KickApi::class.java)
 
     // Unofficial web API -- used for chatroom ID and followed channels (not in official API)
+    private val unofficialClient: OkHttpClient by lazy {
+        baseClient.newBuilder()
+            .addInterceptor(jsonAcceptInterceptor)
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
+            .build()
+    }
+
     fun provideUnofficialApi(): KickUnofficialApi =
         Retrofit.Builder()
             .baseUrl("https://kick.com/")
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(jsonAcceptInterceptor)
-                    .addInterceptor(HttpLoggingInterceptor().apply {
-                        level = HttpLoggingInterceptor.Level.BODY
-                    })
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(15, TimeUnit.SECONDS)
-                    .build()
-            )
+            .client(unofficialClient)
             .addConverterFactory(converterFactory)
             .build()
             .create(KickUnofficialApi::class.java)
@@ -104,19 +108,21 @@ object NetworkModule {
             .create(KickUnofficialApi::class.java)
 
     // 7TV API -- no auth required, used for global + channel emotes
+    private val sevenTvClient: OkHttpClient by lazy {
+        baseClient.newBuilder()
+            .addInterceptor(jsonAcceptInterceptor)
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+    }
+
     fun provideSevenTvApi(): SevenTvApi =
         Retrofit.Builder()
             .baseUrl("https://7tv.io/")
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(jsonAcceptInterceptor)
-                    .addInterceptor(HttpLoggingInterceptor().apply {
-                        level = HttpLoggingInterceptor.Level.BASIC
-                    })
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(10, TimeUnit.SECONDS)
-                    .build(),
-            )
+            .client(sevenTvClient)
             .addConverterFactory(converterFactory)
             .build()
             .create(SevenTvApi::class.java)
