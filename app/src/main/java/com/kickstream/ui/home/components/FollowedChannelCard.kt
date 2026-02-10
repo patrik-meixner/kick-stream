@@ -4,18 +4,22 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +40,7 @@ import com.kickstream.ui.theme.LocalExtendedColors
 fun FollowedChannelCard(
     channel: FollowedChannel,
     onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
 ) {
     val extendedColors = LocalExtendedColors.current
 
@@ -53,7 +58,12 @@ fun FollowedChannelCard(
         scale = CardDefaults.scale(
             focusedScale = 1.05f,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .width(240.dp)
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                else Modifier
+            ),
     ) {
         Column {
             // Compact thumbnail area
@@ -94,23 +104,43 @@ fun FollowedChannelCard(
                     }
                 }
 
-                // Live/Offline indicator
-                Box(
+                // Live/Offline indicator + viewer count
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            if (channel.isLive) extendedColors.liveRed
-                            else Color.Gray.copy(alpha = 0.7f)
-                        ),
+                        .padding(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = if (channel.isLive) "LIVE" else "Offline",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (channel.isLive) extendedColors.liveRed
+                                else Color.Gray.copy(alpha = 0.7f)
+                            ),
+                    ) {
+                        Text(
+                            text = if (channel.isLive) "LIVE" else "Offline",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                        )
+                    }
+                    if (channel.isLive && channel.viewerCount > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.Black.copy(alpha = 0.7f)),
+                        ) {
+                            Text(
+                                text = formatViewerCount(channel.viewerCount),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -138,3 +168,9 @@ fun FollowedChannelCard(
         }
     }
 }
+
+private fun formatViewerCount(count: Int): String = when {
+    count >= 1_000_000 -> "%.1fM".format(count / 1_000_000.0)
+    count >= 1_000 -> "%.1fK".format(count / 1_000.0)
+    else -> count.toString()
+} + " viewers"

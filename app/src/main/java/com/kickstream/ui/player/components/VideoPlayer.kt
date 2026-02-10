@@ -78,14 +78,14 @@ fun VideoPlayer(
 
     val exoPlayer = remember {
         // Tuned buffer for live HLS on TV:
-        // - Low minBuffer (5s) for fast start on live streams
+        // - Generous buffers to prevent micro-stutter and audio pops
         // - Small back-buffer (5s) to prevent unbounded memory growth
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs */ 5_000,
-                /* maxBufferMs */ 30_000,
-                /* bufferForPlaybackMs */ 2_500,
-                /* bufferForPlaybackAfterRebufferMs */ 5_000,
+                /* minBufferMs */ 15_000,
+                /* maxBufferMs */ 50_000,
+                /* bufferForPlaybackMs */ 4_000,
+                /* bufferForPlaybackAfterRebufferMs */ 7_000,
             )
             .setBackBuffer(
                 /* backBufferDurationMs */ 5_000,
@@ -197,11 +197,12 @@ fun VideoPlayer(
         currentOnQualitiesAvailable.value(emptyList())
         retryCountRef.value = 0
         Log.d(TAG, "ExoPlayer loading HLS URL: $hlsUrl")
-        // Configure live stream offset targets for lower latency
+        // Configure live stream offset targets — balance latency vs. smooth playback.
+        // Too aggressive (< 4s) causes buffer underruns → choppy video + audio pops.
         val liveConfig = MediaItem.LiveConfiguration.Builder()
-            .setTargetOffsetMs(3_000)
-            .setMinOffsetMs(2_000)
-            .setMaxOffsetMs(8_000)
+            .setTargetOffsetMs(6_000)
+            .setMinOffsetMs(4_000)
+            .setMaxOffsetMs(15_000)
             .build()
         val mediaItem = MediaItem.Builder()
             .setUri(hlsUrl)

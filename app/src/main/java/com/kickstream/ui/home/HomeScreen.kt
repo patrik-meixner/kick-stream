@@ -1,43 +1,39 @@
 package com.kickstream.ui.home
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
-import androidx.tv.material3.Icon
-import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.kickstream.R
+import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.components.KickLoader
+import com.kickstream.ui.home.components.ContentRow
 import com.kickstream.ui.home.components.FollowedChannelCard
-import com.kickstream.ui.home.components.SearchBar
+import com.kickstream.ui.home.components.NavigationRail
+import com.kickstream.ui.home.components.SearchContent
 
 @Composable
 fun HomeScreen(
@@ -69,140 +65,179 @@ fun HomeScreen(
         }
 
         else -> {
-            // BackHandler covers real D-pad Back presses when search is active.
-            // When search is NOT active, we don't enable it — the default
-            // activity back behavior (finish) takes over.
-            BackHandler(
-                enabled = uiState.searchQuery.isNotEmpty() || uiState.searchResults != null,
-            ) {
-                viewModel.clearSearch()
-            }
-            val focusRequester = remember { FocusRequester() }
+            MainContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                onChannelSelected = onChannelSelected,
+                onLogout = onLogout,
+            )
+        }
+    }
+}
 
-            val isSearching = uiState.searchResults != null
+@Composable
+private fun MainContent(
+    uiState: HomeUiState,
+    viewModel: HomeViewModel,
+    onChannelSelected: (String) -> Unit,
+    onLogout: () -> Unit,
+) {
+    val railFocusRequester = remember { FocusRequester() }
+    val followingFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 260.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 48.dp, top = 24.dp, end = 48.dp),
-                contentPadding = PaddingValues(bottom = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                // Header: KICK logo + Logout button
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.kick_wordmark),
-                            contentDescription = "Kick",
-                            modifier = Modifier.height(36.dp),
-                            contentScale = ContentScale.Fit,
-                        )
-                        IconButton(
-                            onClick = { viewModel.logout(onLogoutComplete = onLogout) },
-                            enabled = !uiState.isLoggingOut,
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_logout),
-                                contentDescription = "Log out",
-                            )
-                        }
-                    }
+    Row(Modifier.fillMaxSize()) {
+        // Left navigation rail
+        NavigationRail(
+            selectedSection = uiState.selectedSection,
+            onSectionSelected = { viewModel.selectSection(it) },
+            onLogout = { viewModel.logout(onLogoutComplete = onLogout) },
+            onFocusContent = {
+                val target = when (uiState.selectedSection) {
+                    HomeSection.FOLLOWING -> followingFocusRequester
+                    HomeSection.SEARCH -> searchFocusRequester
                 }
+                try {
+                    target.requestFocus()
+                } catch (_: IllegalStateException) { }
+            },
+            railFocusRequester = railFocusRequester,
+        )
 
-                // Search bar (full-width) — search by channel slug
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    SearchBar(
-                        query = uiState.searchQuery,
-                        onQueryChanged = { viewModel.onSearchQueryChanged(it) },
-                        onBackPressed = {
-                            // Only clear search state — never finish the activity from here.
-                            // The IME on Android TV converts backspace-on-empty-field to
-                            // KEYCODE_BACK, which would close the app if we called finish().
-                            // Exiting the app is handled by the default back behavior when
-                            // focus is outside the search input.
-                            viewModel.clearSearch()
-                        },
-                        modifier = Modifier
-                            .padding(bottom = 8.dp)
-                            .focusRequester(focusRequester),
-                    )
-                }
+        // Content area — switches based on selected section
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+        ) {
+            when (uiState.selectedSection) {
+                HomeSection.FOLLOWING -> FollowingContent(
+                    followedChannels = uiState.followedChannels,
+                    onChannelSelected = onChannelSelected,
+                    onRefresh = { viewModel.refresh() },
+                    onNavigateToRail = {
+                        try {
+                            railFocusRequester.requestFocus()
+                        } catch (_: IllegalStateException) { }
+                    },
+                    contentFocusRequester = followingFocusRequester,
+                )
 
-                if (isSearching) {
-                    // ── Search results ──────────────────────────────
-                    val results = uiState.searchResults!!
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = if (results.isEmpty()) "No channels found for \"${uiState.searchQuery}\""
-                            else "Search results",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
-
-                    items(results, key = { it.slug }) { channel ->
-                        FollowedChannelCard(
-                            channel = channel,
-                            onClick = { onChannelSelected(channel.slug) },
-                        )
-                    }
-                } else {
-                    // ── Followed Channels (default view) ────────────
-                    if (uiState.followedChannels.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                text = "Followed Channels",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                        }
-
-                        items(
-                            uiState.followedChannels,
-                            key = { it.slug },
-                        ) { channel ->
-                            FollowedChannelCard(
-                                channel = channel,
-                                onClick = { onChannelSelected(channel.slug) },
-                            )
-                        }
-                    } else {
-                        // No followed channels yet — empty state
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 64.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Text(
-                                    text = "No followed channels yet",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = "Search for a channel above, then follow it from the player",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(24.dp))
-                                Button(onClick = { viewModel.refresh() }) {
-                                    Text("Refresh")
-                                }
-                            }
-                        }
-                    }
-                }
+                HomeSection.SEARCH -> SearchContent(
+                    query = uiState.searchQuery,
+                    onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                    results = uiState.searchResults,
+                    isLoading = uiState.isSearchLoading,
+                    isSearchActive = uiState.isSearchActive,
+                    onChannelSelected = onChannelSelected,
+                    onClearSearch = { viewModel.clearSearch() },
+                    onNavigateToRail = {
+                        try {
+                            railFocusRequester.requestFocus()
+                        } catch (_: IllegalStateException) { }
+                    },
+                    searchFocusRequester = searchFocusRequester,
+                )
             }
         }
     }
 }
+
+@Composable
+private fun FollowingContent(
+    followedChannels: List<FollowedChannel>,
+    onChannelSelected: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onNavigateToRail: () -> Unit,
+    contentFocusRequester: FocusRequester,
+) {
+    val liveChannels = followedChannels.filter { it.isLive }
+    val offlineChannels = followedChannels.filterNot { it.isLive }
+
+    if (followedChannels.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+                        onNavigateToRail()
+                        true
+                    } else false
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "No followed channels yet",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Search for a channel, then follow it from the player",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = onRefresh,
+                    modifier = Modifier.focusRequester(contentFocusRequester),
+                ) {
+                    Text("Refresh")
+                }
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 32.dp, top = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            if (liveChannels.isNotEmpty()) {
+                item(key = "live-row") {
+                    ContentRow(
+                        title = "Live Now",
+                        items = liveChannels,
+                        itemKey = { it.slug },
+
+                        firstItemFocusRequester = contentFocusRequester,
+                    ) { channel, focusReq ->
+                        FollowedChannelCard(
+                            channel = channel,
+                            onClick = { onChannelSelected(channel.slug) },
+                            focusRequester = focusReq,
+                        )
+                    }
+                }
+            }
+
+            if (offlineChannels.isNotEmpty()) {
+                item(key = "offline-row") {
+                    ContentRow(
+                        title = "Offline",
+                        items = offlineChannels,
+                        itemKey = { it.slug },
+
+                        firstItemFocusRequester = if (liveChannels.isEmpty()) contentFocusRequester else null,
+                    ) { channel, focusReq ->
+                        FollowedChannelCard(
+                            channel = channel,
+                            onClick = { onChannelSelected(channel.slug) },
+                            focusRequester = focusReq,
+                        )
+                    }
+                }
+            }
+
+            item(key = "bottom-spacer") {
+                Spacer(Modifier.height(32.dp))
+            }
+        }
+
+        // Don't auto-focus content here — focus stays on the rail after
+        // section selection. The user presses Right to enter content.
+        // This prevents the Enter key from the rail leaking into the Card.
+    }
+}
+

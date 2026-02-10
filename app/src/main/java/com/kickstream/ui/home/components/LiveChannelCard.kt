@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -37,6 +39,7 @@ import com.kickstream.ui.theme.LocalExtendedColors
 fun LiveChannelCard(
     stream: LivestreamData,
     onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
 ) {
     val extendedColors = LocalExtendedColors.current
 
@@ -54,6 +57,12 @@ fun LiveChannelCard(
         scale = androidx.tv.material3.CardDefaults.scale(
             focusedScale = 1.05f,
         ),
+        modifier = Modifier
+            .width(240.dp)
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                else Modifier
+            ),
     ) {
         Column {
             // Thumbnail area with 16:9 aspect ratio

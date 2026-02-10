@@ -19,11 +19,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class HomeSection { FOLLOWING, SEARCH }
+
 data class HomeUiState(
     val isLoading: Boolean = true,
+    val selectedSection: HomeSection = HomeSection.FOLLOWING,
     val followedChannels: List<FollowedChannel> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<FollowedChannel>? = null, // null = no active search
+    val isSearchLoading: Boolean = false,
+    /** True from the first keystroke until an explicit back-press clears search.
+     *  Stays true even when the user deletes all characters (empty text field)
+     *  so that BackHandler remains enabled through the IME KEYCODE_BACK race window. */
+    val isSearchActive: Boolean = false,
     val isLoggingOut: Boolean = false,
     val error: String? = null,
 )
@@ -80,28 +88,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * (e.g. Cloudflare blocks the request).
      */
     fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
         searchJob?.cancel()
 
         val trimmedQuery = query.trim()
         if (trimmedQuery.isEmpty()) {
-            _uiState.value = _uiState.value.copy(searchResults = null)
+            // Clear results but keep isSearchActive = true.
+            // The user is still "in search mode" (text field focused, IME open).
+            // Only an explicit back-press (clearSearch) exits search mode.
+            _uiState.value = _uiState.value.copy(
+                searchQuery = query,
+                searchResults = null,
+                isSearchLoading = false,
+            )
             return
         }
+
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            isSearchActive = true,
+            isSearchLoading = true,
+        )
 
         searchJob = viewModelScope.launch {
             delay(400L) // Debounce network calls
             try {
                 val results = searchViaTypesense(trimmedQuery)
-                _uiState.value = _uiState.value.copy(searchResults = results)
+                _uiState.value = _uiState.value.copy(searchResults = results, isSearchLoading = false)
             } catch (e: Exception) {
                 Log.w(TAG, "Typesense search failed, trying official API: ${e.message}")
                 try {
                     val results = searchViaOfficialApi(trimmedQuery)
-                    _uiState.value = _uiState.value.copy(searchResults = results)
+                    _uiState.value = _uiState.value.copy(searchResults = results, isSearchLoading = false)
                 } catch (e2: Exception) {
                     Log.w(TAG, "Official API search also failed: ${e2.message}")
-                    _uiState.value = _uiState.value.copy(searchResults = emptyList())
+                    _uiState.value = _uiState.value.copy(searchResults = emptyList(), isSearchLoading = false)
                 }
             }
         }
@@ -207,10 +227,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun selectSection(section: HomeSection) {
+        _uiState.value = _uiState.value.copy(selectedSection = section)
+    }
+
     fun clearSearch() {
+        searchJob?.cancel()
         _uiState.value = _uiState.value.copy(
             searchQuery = "",
             searchResults = null,
+            isSearchLoading = false,
+            isSearchActive = false,
+            selectedSection = HomeSection.FOLLOWING,
         )
     }
 
