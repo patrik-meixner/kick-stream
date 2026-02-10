@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.kickstream.data.api.NetworkModule
 import com.kickstream.data.chat.EmoteParser
 import com.kickstream.data.chat.ParsedChatMessage
+import com.kickstream.ui.player.components.VideoQuality
 import com.kickstream.data.local.FavoritesStore
 import com.kickstream.data.local.TokenStore
 import com.kickstream.data.repository.ChannelRepository
@@ -37,6 +38,9 @@ data class PlayerUiState(
     val isFollowed: Boolean = false,
     val showControls: Boolean = false,
     val isBuffering: Boolean = false,
+    val availableQualities: List<VideoQuality> = emptyList(),
+    val selectedQualityHeight: Int = 0, // 0 = auto
+    val showQualityMenu: Boolean = false,
     val error: String? = null,
 )
 
@@ -231,13 +235,41 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(isBuffering = isBuffering)
     }
 
+    fun onQualitiesAvailable(qualities: List<VideoQuality>) {
+        // Update available qualities, preserving current selection
+        val current = _uiState.value.selectedQualityHeight
+        _uiState.value = _uiState.value.copy(
+            availableQualities = qualities.map { it.copy(isSelected = it.height == current) },
+        )
+    }
+
+    fun selectQuality(height: Int) {
+        _uiState.value = _uiState.value.copy(
+            selectedQualityHeight = height,
+            showQualityMenu = false,
+            availableQualities = _uiState.value.availableQualities.map {
+                it.copy(isSelected = it.height == height)
+            },
+        )
+        Log.d(TAG, "Quality selected: ${if (height == 0) "Auto" else "${height}p"}")
+    }
+
+    fun toggleQualityMenu() {
+        _uiState.value = _uiState.value.copy(showQualityMenu = !_uiState.value.showQualityMenu)
+    }
+
     fun showControls() {
         controlsHideJob?.cancel()
         _uiState.value = _uiState.value.copy(showControls = true)
         controlsHideJob = viewModelScope.launch {
             delay(CONTROLS_AUTO_HIDE_MS)
-            _uiState.value = _uiState.value.copy(showControls = false)
+            _uiState.value = _uiState.value.copy(showControls = false, showQualityMenu = false)
         }
+    }
+
+    fun hideControls() {
+        controlsHideJob?.cancel()
+        _uiState.value = _uiState.value.copy(showControls = false, showQualityMenu = false)
     }
 
     override fun onCleared() {

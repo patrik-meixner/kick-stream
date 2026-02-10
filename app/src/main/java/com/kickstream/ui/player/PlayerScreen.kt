@@ -2,10 +2,12 @@ package com.kickstream.ui.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,14 +20,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -34,11 +41,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
@@ -59,8 +68,17 @@ fun PlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Use BackHandler for proper integration with Navigation back stack
-    BackHandler(enabled = true) { onBack() }
+    // Back: dismiss quality menu → hide controls → navigate back
+    BackHandler(enabled = true) {
+        when {
+            uiState.showQualityMenu -> viewModel.toggleQualityMenu()
+            uiState.showControls -> {
+                // Hide controls instead of navigating away
+                viewModel.hideControls()
+            }
+            else -> onBack()
+        }
+    }
 
     LaunchedEffect(channelSlug) {
         viewModel.loadChannel(channelSlug)
@@ -142,6 +160,12 @@ fun PlayerScreen(
             }
 
             uiState.isOffline -> {
+                val offlineChatWidth by animateDpAsState(
+                    targetValue = if (uiState.isChatVisible) 280.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 300),
+                    label = "offlineChatWidth",
+                )
+
                 // Offline channel: no video, but chat + follow still available
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(
@@ -222,42 +246,56 @@ fun PlayerScreen(
                     }
 
                     // Chat sidebar (still works for offline channels)
-                    AnimatedVisibility(
-                        visible = uiState.isChatVisible,
-                        enter = slideInHorizontally(initialOffsetX = { it }),
-                        exit = slideOutHorizontally(targetOffsetX = { it }),
-                    ) {
-                        ChatSidebar(
-                            messages = uiState.chatMessages,
-                            subscriberBadgeUrls = uiState.subscriberBadgeUrls,
-                            modifier = Modifier.width(280.dp),
-                        )
+                    if (offlineChatWidth > 0.dp) {
+                        Box(
+                            modifier = Modifier
+                                .width(offlineChatWidth)
+                                .fillMaxHeight()
+                                .clipToBounds(),
+                        ) {
+                            ChatSidebar(
+                                messages = uiState.chatMessages,
+                                subscriberBadgeUrls = uiState.subscriberBadgeUrls,
+                                modifier = Modifier.requiredWidth(280.dp),
+                            )
+                        }
                     }
                 }
             }
 
             uiState.hlsUrl != null -> {
+                val chatWidth by animateDpAsState(
+                    targetValue = if (uiState.isChatVisible) 280.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 300),
+                    label = "chatWidth",
+                )
+
                 // Main content: Video + Chat
                 Row(modifier = Modifier.fillMaxSize()) {
                     VideoPlayer(
                         hlsUrl = uiState.hlsUrl!!,
                         onBufferingChanged = { viewModel.onBufferingChanged(it) },
+                        onQualitiesAvailable = { viewModel.onQualitiesAvailable(it) },
+                        selectedQualityHeight = uiState.selectedQualityHeight,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                             .background(Color.Black),
                     )
 
-                    AnimatedVisibility(
-                        visible = uiState.isChatVisible,
-                        enter = slideInHorizontally(initialOffsetX = { it }),
-                        exit = slideOutHorizontally(targetOffsetX = { it }),
-                    ) {
-                        ChatSidebar(
-                            messages = uiState.chatMessages,
-                            subscriberBadgeUrls = uiState.subscriberBadgeUrls,
-                            modifier = Modifier.width(280.dp),
-                        )
+                    if (chatWidth > 0.dp) {
+                        Box(
+                            modifier = Modifier
+                                .width(chatWidth)
+                                .fillMaxHeight()
+                                .clipToBounds(),
+                        ) {
+                            ChatSidebar(
+                                messages = uiState.chatMessages,
+                                subscriberBadgeUrls = uiState.subscriberBadgeUrls,
+                                modifier = Modifier.requiredWidth(280.dp),
+                            )
+                        }
                     }
                 }
 
@@ -359,7 +397,7 @@ fun PlayerScreen(
                             }
                         }
 
-                        // ── Bottom section: action buttons (Follow + Chat toggle) ──
+                        // ── Bottom section: action buttons ──
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -380,11 +418,45 @@ fun PlayerScreen(
                                 horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                // Quality button (gear icon) — only when qualities available
+                                if (uiState.availableQualities.isNotEmpty()) {
+                                    val currentLabel = uiState.availableQualities
+                                        .firstOrNull { it.isSelected }?.label ?: "Auto"
+                                    Button(
+                                        onClick = {
+                                            viewModel.toggleQualityMenu()
+                                            viewModel.showControls()
+                                        },
+                                        shape = ButtonDefaults.shape(
+                                            shape = RoundedCornerShape(6.dp),
+                                        ),
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = Color.White.copy(alpha = 0.15f),
+                                            contentColor = Color.White,
+                                            focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                                            focusedContentColor = Color.White,
+                                        ),
+                                        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_settings),
+                                            contentDescription = "Quality",
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = currentLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                }
+
                                 // Follow / Unfollow button (star)
                                 IconButton(
                                     onClick = {
                                         viewModel.toggleFollow()
-                                        viewModel.showControls() // reset auto-hide timer
+                                        viewModel.showControls()
                                     },
                                     colors = IconButtonDefaults.colors(
                                         containerColor = Color.White.copy(alpha = 0.15f),
@@ -410,7 +482,7 @@ fun PlayerScreen(
                                 IconButton(
                                     onClick = {
                                         viewModel.toggleChat()
-                                        viewModel.showControls() // reset auto-hide timer
+                                        viewModel.showControls()
                                     },
                                     colors = IconButtonDefaults.colors(
                                         containerColor = Color.White.copy(alpha = 0.15f),
@@ -428,6 +500,97 @@ fun PlayerScreen(
                                         contentDescription = if (uiState.isChatVisible) "Hide chat" else "Show chat",
                                         modifier = Modifier.size(24.dp),
                                     )
+                                }
+                            }
+                        }
+
+                        // ── Quality popup menu (slides up from bottom-right) ──
+                        val qualityFocusRequester = remember { FocusRequester() }
+
+                        AnimatedVisibility(
+                            visible = uiState.showQualityMenu,
+                            enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { it / 2 },
+                            exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { it / 2 },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 32.dp, bottom = 72.dp),
+                        ) {
+                            // Auto-focus the selected quality when menu opens
+                            LaunchedEffect(Unit) {
+                                qualityFocusRequester.requestFocus()
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .background(
+                                        Color(0xE61A1A1D),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                // Header
+                                Text(
+                                    text = "Quality",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 4.dp,
+                                    ),
+                                )
+                                uiState.availableQualities.forEach { quality ->
+                                    val isSelected = quality.isSelected
+                                    Button(
+                                        onClick = {
+                                            viewModel.selectQuality(quality.height)
+                                            viewModel.showControls()
+                                        },
+                                        shape = ButtonDefaults.shape(
+                                            shape = RoundedCornerShape(0.dp),
+                                        ),
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = Color.Transparent,
+                                            contentColor = if (isSelected) KickGreen else Color.White,
+                                            focusedContainerColor = Color.White.copy(alpha = 0.15f),
+                                            focusedContentColor = if (isSelected) KickGreen else Color.White,
+                                        ),
+                                        modifier = Modifier
+                                            .width(160.dp)
+                                            .then(
+                                                if (isSelected) Modifier.focusRequester(qualityFocusRequester)
+                                                else Modifier,
+                                            ),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = quality.label,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                )
+                                                if (quality.height == 0) {
+                                                    Text(
+                                                        text = "Recommended",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color.White.copy(alpha = 0.4f),
+                                                    )
+                                                }
+                                            }
+                                            if (isSelected) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_check),
+                                                    contentDescription = null,
+                                                    tint = KickGreen,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -65,6 +65,10 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -106,5 +110,7 @@ dependencies {
     implementation(libs.splashscreen)
 
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test)
+    testImplementation(libs.robolectric)
 }

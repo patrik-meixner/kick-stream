@@ -7,6 +7,7 @@ import com.kickstream.data.api.model.ChannelData
 import com.kickstream.data.api.model.ChannelsApiResponse
 import com.kickstream.data.api.model.LivestreamData
 import com.kickstream.data.api.model.LivestreamsApiResponse
+import com.kickstream.data.api.model.UsersApiResponse
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,6 +28,9 @@ class ChannelRepositoryTest {
 
         override suspend fun getChannelBySlug(slug: List<String>) =
             ChannelsApiResponse(data = channels.filter { it.slug in slug })
+
+        override suspend fun getUsers(ids: List<Int>) =
+            UsersApiResponse()
     }
 
     @Test
@@ -89,6 +93,9 @@ class ChannelRepositoryTest {
             ): LivestreamsApiResponse = throw RuntimeException("Network error")
 
             override suspend fun getChannelBySlug(slug: List<String>) =
+                throw NotImplementedError()
+
+            override suspend fun getUsers(ids: List<Int>) =
                 throw NotImplementedError()
         }
         val repo = ChannelRepository(errorApi)

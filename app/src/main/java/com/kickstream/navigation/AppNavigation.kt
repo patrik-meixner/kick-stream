@@ -1,5 +1,8 @@
 package com.kickstream.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -25,6 +28,10 @@ fun AppNavigation() {
     NavHost(
         navController = navController,
         startDestination = Routes.LOGIN,
+        enterTransition = { fadeIn(animationSpec = tween(300)) },
+        exitTransition = { fadeOut(animationSpec = tween(300)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+        popExitTransition = { fadeOut(animationSpec = tween(300)) },
     ) {
         composable(Routes.LOGIN) {
             LoginScreen(
