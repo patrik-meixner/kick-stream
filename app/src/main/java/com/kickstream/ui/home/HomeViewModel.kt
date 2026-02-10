@@ -119,12 +119,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val channelResults = response.results.firstOrNull()
         Log.d(TAG, "Typesense: ${response.results.size} result sets, channels found=${channelResults?.found ?: 0}")
 
-        val slugs = channelResults?.hits
+        val hits = channelResults?.hits
             ?.filter { !it.document.isBanned }
-            ?.map { it.document.slug }
             ?: return emptyList()
 
+        val slugs = hits.map { it.document.slug }
         if (slugs.isEmpty()) return emptyList()
+
+        // Typesense often includes profile_picture — keep as fallback
+        val typesenseProfilePics = hits
+            .filter { it.document.profilePicture != null }
+            .associate { it.document.slug to it.document.profilePicture!! }
 
         // Enrich with official API data (stream info, thumbnails, profile pictures)
         val channelMap = try {
@@ -149,17 +154,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             emptyMap()
         }
 
-        // Merge: preserve Typesense ordering, overlay official API data
+        // Merge: preserve Typesense ordering, overlay official API data.
+        // Profile picture priority: Users API > banner > Typesense search result
+        // Use takeIf to filter out empty strings (API sometimes returns "" instead of null)
         return slugs.map { slug ->
             val ch = channelMap[slug]
+            val thumbnail = ch?.stream?.thumbnail?.takeIf { it.isNotBlank() }
+            val profilePic = profilePicMap[ch?.broadcasterUserId]?.takeIf { it.isNotBlank() }
+                ?: ch?.bannerPicture?.takeIf { it.isNotBlank() }
+                ?: typesenseProfilePics[slug]?.takeIf { it.isNotBlank() }
+            Log.d(TAG, "Search result '$slug': thumbnail=$thumbnail, profilePic=$profilePic, typesensePic=${typesenseProfilePics[slug]}")
             FollowedChannel(
                 slug = slug,
                 isLive = ch?.stream?.isLive ?: false,
                 streamTitle = ch?.streamTitle,
                 viewerCount = ch?.stream?.viewerCount ?: 0,
-                thumbnail = ch?.stream?.thumbnail,
-                profilePicture = profilePicMap[ch?.broadcasterUserId]
-                    ?: ch?.bannerPicture,
+                thumbnail = thumbnail,
+                profilePicture = profilePic,
                 categoryName = ch?.category?.name,
             )
         }
@@ -188,9 +199,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 isLive = ch.stream?.isLive ?: false,
                 streamTitle = ch.streamTitle,
                 viewerCount = ch.stream?.viewerCount ?: 0,
-                thumbnail = ch.stream?.thumbnail,
-                profilePicture = profilePicMap[ch.broadcasterUserId]
-                    ?: ch.bannerPicture,
+                thumbnail = ch.stream?.thumbnail?.takeIf { it.isNotBlank() },
+                profilePicture = profilePicMap[ch.broadcasterUserId]?.takeIf { it.isNotBlank() }
+                    ?: ch.bannerPicture?.takeIf { it.isNotBlank() },
                 categoryName = ch.category?.name,
             )
         }

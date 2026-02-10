@@ -14,10 +14,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class PlayerViewSurfaceTypeTest {
     @Test
-    fun playerViewUsesSurfaceViewSurface() {
+    fun playerViewDefaultsSurfaceView() {
+        // Inflate view_player.xml and verify it uses SurfaceView (not TextureView).
+        // This matches how VideoPlayer.kt inflates the layout at runtime.
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val view = LayoutInflater.from(context).inflate(R.layout.view_player, null, false)
-        val playerView = view as androidx.media3.ui.PlayerView
+        val playerView = LayoutInflater.from(context)
+            .inflate(R.layout.view_player, null) as androidx.media3.ui.PlayerView
         val surface = playerView.videoSurfaceView
         assertTrue("Expected SurfaceView but got ${surface?.javaClass?.name}", surface is SurfaceView)
     }

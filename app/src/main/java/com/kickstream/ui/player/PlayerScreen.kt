@@ -122,8 +122,13 @@ fun PlayerScreen(
                         }
 
                         Key.DirectionUp -> {
-                            viewModel.showControls()
-                            true
+                            if (uiState.showQualityMenu) {
+                                // Let D-pad navigate within the quality menu
+                                false
+                            } else {
+                                viewModel.showControls()
+                                true
+                            }
                         }
 
                         else -> false
@@ -300,11 +305,18 @@ fun PlayerScreen(
                 }
 
                 // Controls overlay (full-screen: top gradient for info, bottom gradient for buttons)
+                val controlsFocusRequester = remember { FocusRequester() }
+
                 AnimatedVisibility(
                     visible = uiState.showControls,
                     enter = fadeIn(),
                     exit = fadeOut(),
                 ) {
+                    // Auto-focus the chat button when controls overlay appears
+                    LaunchedEffect(Unit) {
+                        controlsFocusRequester.requestFocus()
+                    }
+
                     Box(modifier = Modifier.fillMaxSize()) {
                         // ── Top section: channel info ──
                         Box(
@@ -490,7 +502,9 @@ fun PlayerScreen(
                                         focusedContainerColor = Color.White.copy(alpha = 0.3f),
                                         focusedContentColor = Color.White,
                                     ),
-                                    modifier = Modifier.size(48.dp),
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .focusRequester(controlsFocusRequester),
                                 ) {
                                     Icon(
                                         painter = painterResource(

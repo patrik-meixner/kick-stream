@@ -47,7 +47,7 @@ fun SearchBar(
     onQueryChanged: (String) -> Unit,
     onBackPressed: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search streams...",
+    placeholder: String = "Search channels...",
 ) {
     val focusManager = LocalFocusManager.current
 
@@ -97,9 +97,9 @@ fun SearchBar(
                             focusManager.moveFocus(FocusDirection.Up)
                             true
                         }
-                        // Consume Back key to prevent IME-generated back from
-                        // reaching the activity's OnBackPressedDispatcher.
-                        // Delegates actual back logic to the caller.
+                        // Always consume Back/Escape to prevent IME-generated KEYCODE_BACK
+                        // from reaching the Activity's OnBackPressedDispatcher (which would
+                        // finish the activity). Delegates to the caller for actual logic.
                         Key.Back, Key.Escape -> {
                             onBackPressed()
                             true

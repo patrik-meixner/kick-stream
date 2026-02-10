@@ -26,6 +26,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import android.util.Log
 import coil.compose.AsyncImage
 import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.theme.KickGreen
@@ -64,13 +65,16 @@ fun FollowedChannelCard(
                 contentAlignment = Alignment.Center,
             ) {
                 // Image priority: live thumbnail > banner/profile picture > initial letter
-                val imageUrl = channel.thumbnail ?: channel.profilePicture
+                val imageUrl = (channel.thumbnail ?: channel.profilePicture)
+                    ?.takeIf { it.isNotBlank() }
+                Log.d("KickStream", "Card '${channel.slug}': imageUrl=$imageUrl, thumbnail=${channel.thumbnail}, profilePic=${channel.profilePicture}")
                 if (imageUrl != null) {
                     AsyncImage(
                         model = imageUrl,
                         contentDescription = channel.slug,
                         modifier = Modifier.matchParentSize(),
                         contentScale = ContentScale.Crop,
+                        onError = { Log.e("KickStream", "Coil failed to load image for '${channel.slug}': ${it.result.throwable.message}, url=$imageUrl") },
                     )
                 } else {
                     // No image available — show styled initial letter in a circle

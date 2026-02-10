@@ -53,4 +53,5 @@ data class TypesenseChannelDocument(
     @SerialName("is_banned") val isBanned: Boolean = false,
     @SerialName("followers_count") val followersCount: Int = 0,
     val verified: Boolean = false,
+    @SerialName("profile_picture") val profilePicture: String? = null,
 )

@@ -1,6 +1,5 @@
 package com.kickstream.ui.home
 
-import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,7 +35,6 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kickstream.R
-import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.components.KickLoader
 import com.kickstream.ui.home.components.FollowedChannelCard
 import com.kickstream.ui.home.components.SearchBar
@@ -72,7 +69,6 @@ fun HomeScreen(
         }
 
         else -> {
-            val context = LocalContext.current
             // BackHandler covers real D-pad Back presses when search is active.
             // When search is NOT active, we don't enable it — the default
             // activity back behavior (finish) takes over.
@@ -82,9 +78,6 @@ fun HomeScreen(
                 viewModel.clearSearch()
             }
             val focusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
 
             val isSearching = uiState.searchResults != null
 
@@ -130,11 +123,12 @@ fun HomeScreen(
                         query = uiState.searchQuery,
                         onQueryChanged = { viewModel.onSearchQueryChanged(it) },
                         onBackPressed = {
-                            if (uiState.searchQuery.isNotEmpty() || uiState.searchResults != null) {
-                                viewModel.clearSearch()
-                            } else {
-                                (context as? Activity)?.finish()
-                            }
+                            // Only clear search state — never finish the activity from here.
+                            // The IME on Android TV converts backspace-on-empty-field to
+                            // KEYCODE_BACK, which would close the app if we called finish().
+                            // Exiting the app is handled by the default back behavior when
+                            // focus is outside the search input.
+                            viewModel.clearSearch()
                         },
                         modifier = Modifier
                             .padding(bottom = 8.dp)

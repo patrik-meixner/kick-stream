@@ -36,6 +36,8 @@ private const val TAG = "KickStream"
 private const val MAX_RETRIES = 3
 private const val RETRY_DELAY_MS = 2000L
 private const val SHUTTER_TIMEOUT_MS = 1500L
+/** Minimum video height exposed in the quality menu (below this, scaling breaks on TV) */
+private const val MIN_QUALITY_HEIGHT = 480
 
 /**
  * Mutable ref that does NOT trigger recomposition.
@@ -69,6 +71,7 @@ fun VideoPlayer(
     val lastTracksRef = remember { Ref<Tracks?>(null) }
     val retryCountRef = remember { Ref(0) }
     val lastAppliedHeightRef = remember { Ref<Int?>(null) }
+    // Reference to the PlayerView for surface detach/reattach during quality switch
     val playerViewRef = remember { Ref<PlayerView?>(null) }
     // Black shutter overlay: shown during quality switch, dismissed on onVideoSizeChanged
     val shutterVisible = remember { mutableStateOf(false) }
@@ -157,17 +160,28 @@ fun VideoPlayer(
         // Show black shutter when quality actually changes (not on initial load)
         if (previousHeight != null && previousHeight != resolvedHeight) {
             shutterVisible.value = true
-            // Detach surface → apply override → re-attach surface.
-            // This forces the old decoder to stop rendering stale frames
-            // before the new track's decoder starts.
-            exoPlayer.clearVideoSurface()
-            applyQualityConstraint(exoPlayer, resolvedHeight)
-            playerViewRef.value?.let { pv ->
-                exoPlayer.setVideoSurfaceView(pv.videoSurfaceView as? android.view.SurfaceView)
-            }
             // Safety timeout: dismiss shutter if onVideoSizeChanged doesn't fire
             // (e.g., same-resolution tracks with different bitrates)
             mainHandler.postDelayed({ shutterVisible.value = false }, SHUTTER_TIMEOUT_MS)
+
+            // Detach player from PlayerView → apply track override → reattach.
+            // Setting player=null disconnects the surface, killing any ghost frames
+            // from the old decoder. Re-setting player=exoPlayer goes through
+            // PlayerView's full internal wiring (AspectRatioFrameLayout sizing,
+            // surface binding, etc.) so the new resolution fills the view correctly.
+            // This is safer than raw clearVideoSurface()/setVideoSurfaceView() which
+            // bypasses PlayerView's layout integration and causes tiny-video-in-corner.
+            val pv = playerViewRef.value
+            if (pv != null) {
+                pv.player = null
+                applyQualityConstraint(exoPlayer, resolvedHeight)
+                // Post re-attach to next frame so the decoder has time to flush
+                mainHandler.post {
+                    pv.player = exoPlayer
+                }
+            } else {
+                applyQualityConstraint(exoPlayer, resolvedHeight)
+            }
         } else {
             applyQualityConstraint(exoPlayer, resolvedHeight)
         }
@@ -210,14 +224,18 @@ fun VideoPlayer(
     Box(modifier = modifier) {
         AndroidView(
             factory = { ctx ->
-                val view = LayoutInflater.from(ctx).inflate(R.layout.view_player, null, false)
-                val playerView = view as? PlayerView
-                    ?: error("R.layout.view_player root must be PlayerView")
-                playerViewRef.value = playerView
-                playerView.apply {
+                // Inflate from XML to guarantee surface_type="surface_view" is respected.
+                // SurfaceView renders to a hardware overlay — full display resolution,
+                // lower power, and no texture buffer ghosting (unlike TextureView).
+                val view = LayoutInflater.from(ctx)
+                    .inflate(R.layout.view_player, null) as PlayerView
+                view.apply {
                     player = exoPlayer
                     useController = false // TV uses D-pad, not on-screen controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    // Don't keep the last frame when player resets — avoids stale frame flash
+                    setKeepContentOnPlayerReset(false)
+                    playerViewRef.value = this
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -248,7 +266,10 @@ private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<V
     }
     if (heights.isEmpty()) return emptyList()
 
-    val sorted = heights.sortedDescending()
+    // Drop resolutions below MIN_QUALITY_HEIGHT — they don't scale properly on TV
+    val sorted = heights.filter { it >= MIN_QUALITY_HEIGHT }.sortedDescending()
+    if (sorted.isEmpty()) return emptyList()
+
     val selectedHeight = when {
         selectedQualityHeight == 0 -> 0
         sorted.contains(selectedQualityHeight) -> selectedQualityHeight

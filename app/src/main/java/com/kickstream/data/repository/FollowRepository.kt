@@ -65,15 +65,17 @@ class FollowRepository(
             val profilePicMap = fetchProfilePictures(userIds)
 
             val channels = response.data.map { ch ->
+                val thumbnail = ch.stream?.thumbnail?.takeIf { it.isNotBlank() }
+                val profilePic = profilePicMap[ch.broadcasterUserId]?.takeIf { it.isNotBlank() }
+                    ?: ch.bannerPicture?.takeIf { it.isNotBlank() }
+                Log.d(TAG, "Followed channel '${ch.slug}': thumbnail=$thumbnail, profilePic=$profilePic, banner=${ch.bannerPicture}, stream=${ch.stream}")
                 FollowedChannel(
                     slug = ch.slug,
                     isLive = ch.stream?.isLive ?: false,
                     streamTitle = ch.streamTitle,
                     viewerCount = ch.stream?.viewerCount ?: 0,
-                    thumbnail = ch.stream?.thumbnail,
-                    // Prefer profile picture (always available), fall back to banner
-                    profilePicture = profilePicMap[ch.broadcasterUserId]
-                        ?: ch.bannerPicture,
+                    thumbnail = thumbnail,
+                    profilePicture = profilePic,
                     categoryName = ch.category?.name,
                 )
             }
