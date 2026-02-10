@@ -1,8 +1,6 @@
 package com.kickstream.ui.home.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,28 +16,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.kickstream.data.api.model.LivestreamData
 import com.kickstream.ui.theme.LocalExtendedColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.URL
 
 @Composable
 fun LiveChannelCard(
@@ -53,6 +45,15 @@ fun LiveChannelCard(
         shape = androidx.tv.material3.CardDefaults.shape(
             shape = RoundedCornerShape(12.dp),
         ),
+        border = androidx.tv.material3.CardDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                border = BorderStroke(2.dp, Color(0xFF53FC18)),
+                shape = RoundedCornerShape(12.dp),
+            ),
+        ),
+        scale = androidx.tv.material3.CardDefaults.scale(
+            focusedScale = 1.05f,
+        ),
     ) {
         Column {
             // Thumbnail area with 16:9 aspect ratio
@@ -64,24 +65,12 @@ fun LiveChannelCard(
             ) {
                 val thumbnailUrl = stream.thumbnail
                 if (thumbnailUrl != null) {
-                    var bitmap by remember(thumbnailUrl) { mutableStateOf<Bitmap?>(null) }
-                    LaunchedEffect(thumbnailUrl) {
-                        bitmap = withContext(Dispatchers.IO) {
-                            try {
-                                BitmapFactory.decodeStream(URL(thumbnailUrl).openStream())
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
-                    }
-                    bitmap?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = stream.slug,
-                            modifier = Modifier.matchParentSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
+                    AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = stream.slug,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                    )
                 }
 
                 // Bottom gradient overlay for text readability

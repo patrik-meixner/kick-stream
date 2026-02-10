@@ -12,7 +12,9 @@ import com.kickstream.data.repository.AuthRepository
 import com.kickstream.data.repository.ChannelRepository
 import com.kickstream.data.repository.FollowRepository
 import com.kickstream.data.repository.FollowedChannel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +55,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // Keep a cached copy of all livestreams for client-side search filtering
     private var allLivestreams: List<LivestreamData> = emptyList()
+    private var searchJob: Job? = null
 
     init {
         loadData()
@@ -100,21 +103,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onSearchQueryChanged(query: String) {
-        val trimmedQuery = query.trim()
         _uiState.value = _uiState.value.copy(searchQuery = query)
+        searchJob?.cancel()
 
+        val trimmedQuery = query.trim()
         if (trimmedQuery.isEmpty()) {
             _uiState.value = _uiState.value.copy(searchResults = null)
             return
         }
 
-        // Client-side filter on slug, title, and category name
-        val filtered = allLivestreams.filter { stream ->
-            stream.slug.contains(trimmedQuery, ignoreCase = true) ||
-                stream.streamTitle?.contains(trimmedQuery, ignoreCase = true) == true ||
-                stream.category?.name?.contains(trimmedQuery, ignoreCase = true) == true
+        searchJob = viewModelScope.launch {
+            delay(200L)
+            val filtered = allLivestreams.filter { stream ->
+                stream.slug.contains(trimmedQuery, ignoreCase = true) ||
+                    stream.streamTitle?.contains(trimmedQuery, ignoreCase = true) == true ||
+                    stream.category?.name?.contains(trimmedQuery, ignoreCase = true) == true
+            }
+            _uiState.value = _uiState.value.copy(searchResults = filtered)
         }
-        _uiState.value = _uiState.value.copy(searchResults = filtered)
     }
 
     fun clearSearch() {

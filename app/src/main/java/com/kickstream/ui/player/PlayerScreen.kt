@@ -281,16 +281,20 @@ fun PlayerScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No stream URL available",
+                            text = uiState.error ?: "No stream URL available",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "The channel may not be live. Press Back to return.",
+                            text = "The channel may not be live.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.height(24.dp))
+                        Button(onClick = { viewModel.loadChannel(channelSlug) }) {
+                            Text("Retry")
+                        }
                     }
                 }
             }

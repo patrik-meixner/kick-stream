@@ -1,8 +1,6 @@
 package com.kickstream.ui.home.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,12 +23,10 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.theme.KickGreen
 import com.kickstream.ui.theme.LocalExtendedColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.URL
 
 @Composable
 fun FollowedChannelCard(
@@ -50,6 +40,15 @@ fun FollowedChannelCard(
         shape = CardDefaults.shape(
             shape = RoundedCornerShape(12.dp),
         ),
+        border = CardDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                border = BorderStroke(2.dp, Color(0xFF53FC18)),
+                shape = RoundedCornerShape(12.dp),
+            ),
+        ),
+        scale = CardDefaults.scale(
+            focusedScale = 1.05f,
+        ),
         modifier = Modifier.width(200.dp),
     ) {
         Column {
@@ -62,24 +61,12 @@ fun FollowedChannelCard(
             ) {
                 val thumbnailUrl = channel.thumbnail
                 if (thumbnailUrl != null) {
-                    var bitmap by remember(thumbnailUrl) { mutableStateOf<Bitmap?>(null) }
-                    LaunchedEffect(thumbnailUrl) {
-                        bitmap = withContext(Dispatchers.IO) {
-                            try {
-                                BitmapFactory.decodeStream(URL(thumbnailUrl).openStream())
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
-                    }
-                    bitmap?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = channel.slug,
-                            modifier = Modifier.matchParentSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
+                    AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = channel.slug,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                    )
                 }
 
                 // Live/Offline indicator

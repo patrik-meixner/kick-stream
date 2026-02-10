@@ -25,8 +25,8 @@ class EmoteRepository(private val sevenTvApi: SevenTvApi) {
     }
 
     // Global emotes loaded once per app session
-    private var globalEmotes: Map<String, Emote> = emptyMap()
-    private var globalLoaded = false
+    @Volatile private var globalEmotes: Map<String, Emote> = emptyMap()
+    @Volatile private var globalLoaded = false
 
     // Channel emotes cached by Kick user ID
     private val channelEmotesCache = mutableMapOf<Int, Map<String, Emote>>()

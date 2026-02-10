@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
 data class PlayerUiState(
@@ -58,13 +59,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val maxChatMessages = 200
     private val chatBuffer = ArrayDeque<ParsedChatMessage>(maxChatMessages)
-    private var emoteMap: Map<String, Emote> = emptyMap()
+    @Volatile private var emoteMap: Map<String, Emote> = emptyMap()
     private var controlsHideJob: Job? = null
     private var chatJob: Job? = null
     private var chatFlushJob: Job? = null
     @Volatile private var chatDirty = false
-    private var currentSlug: String = ""
-    private var currentKickUserId: Int = 0
+    @Volatile private var currentSlug: String = ""
+    @Volatile private var currentKickUserId: Int = 0
 
     fun loadChannel(slug: String) {
         currentSlug = slug
@@ -203,7 +204,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         chatJob = viewModelScope.launch {
-            chatRepository.getChatMessages(chatroomId).collect { message ->
+            chatRepository.getChatMessages(chatroomId)
+                .catch { e -> Log.e(TAG, "Chat stream error: ${e.message}", e) }
+                .collect { message ->
                 val parsed = EmoteParser.parseMessage(message, emoteMap)
                 chatBuffer.addLast(parsed)
                 if (chatBuffer.size > maxChatMessages) {

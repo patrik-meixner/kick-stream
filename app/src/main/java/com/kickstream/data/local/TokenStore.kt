@@ -8,11 +8,24 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 private val Context.dataStore by preferencesDataStore(name = "kick_tokens")
 
 class TokenStore(private val context: Context) {
+
+    @Volatile
+    private var cachedAccessToken: String? = null
+
+    init {
+        // Prime the token cache from DataStore on creation (non-blocking)
+        @Suppress("OPT_IN_USAGE")
+        GlobalScope.launch(Dispatchers.IO) {
+            cachedAccessToken = context.dataStore.data.first()[ACCESS_TOKEN]
+        }
+    }
 
     companion object {
         private val ACCESS_TOKEN = stringPreferencesKey("access_token")
@@ -25,6 +38,7 @@ class TokenStore(private val context: Context) {
     }
 
     suspend fun saveTokens(accessToken: String, refreshToken: String?, expiresIn: Long) {
+        cachedAccessToken = accessToken
         context.dataStore.edit { prefs ->
             prefs[ACCESS_TOKEN] = accessToken
             refreshToken?.let { prefs[REFRESH_TOKEN] = it }
@@ -32,12 +46,13 @@ class TokenStore(private val context: Context) {
         }
     }
 
-    suspend fun getAccessToken(): String? =
-        context.dataStore.data.first()[ACCESS_TOKEN]
-
-    fun getAccessTokenSync(): String? = runBlocking {
-        context.dataStore.data.first()[ACCESS_TOKEN]
+    suspend fun getAccessToken(): String? {
+        val token = context.dataStore.data.first()[ACCESS_TOKEN]
+        cachedAccessToken = token
+        return token
     }
+
+    fun getAccessTokenSync(): String? = cachedAccessToken
 
     suspend fun getRefreshToken(): String? =
         context.dataStore.data.first()[REFRESH_TOKEN]
@@ -48,6 +63,7 @@ class TokenStore(private val context: Context) {
     }
 
     suspend fun clear() {
+        cachedAccessToken = null
         context.dataStore.edit { it.clear() }
     }
 }

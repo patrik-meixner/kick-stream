@@ -10,13 +10,14 @@ object QrCodeUtil {
     fun generateQrCode(content: String, size: Int): Bitmap? =
         try {
             val bitMatrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
-            for (x in 0 until size) {
-                for (y in 0 until size) {
-                    bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
-                }
+            val pixels = IntArray(size * size) { i ->
+                val x = i % size
+                val y = i / size
+                if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE
             }
-            bitmap
+            Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565).apply {
+                setPixels(pixels, 0, size, 0, 0, size, size)
+            }
         } catch (_: Exception) {
             null
         }
