@@ -34,8 +34,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "KickStream"
-        /** WebView intercepts redirects starting with this prefix. */
-        const val REDIRECT_PREFIX = "http://127.0.0.1:8374/callback"
+        /** WebView intercepts redirects starting with the registered redirect URI. */
+        val REDIRECT_PREFIX: String = com.kickstream.BuildConfig.KICK_REDIRECT_URI
     }
 
     private val tokenStore = TokenStore(application)
@@ -91,7 +91,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 waitJob = launch {
                     try {
                         val code = authRepository.waitForCallback(session.state)
-                        exchangeCode(code, useLocalRedirect = false)
+                        exchangeCode(code)
                     } catch (e: java.net.SocketTimeoutException) {
                         _uiState.value = _uiState.value.copy(
                             isWaitingForCallback = false,
@@ -127,7 +127,9 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                val session = authRepository.createAuthSession(useLocalRedirect = true)
+                // Use the same registered redirect URI — the WebView intercepts it
+                // before the page loads, extracting the code from the URL params
+                val session = authRepository.createAuthSession(useLocalRedirect = false)
                 currentSession = session
                 Log.d(TAG, "WebView Auth URL: ${session.authorizationUrl}")
 
@@ -187,7 +189,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        exchangeCode(code, useLocalRedirect = true)
+        exchangeCode(code)
     }
 
     /** Called when user manually enters the code from the relay page. */
@@ -206,10 +208,10 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Manual code comes from the QR flow (remote redirect URI)
-        exchangeCode(code.trim(), useLocalRedirect = false)
+        exchangeCode(code.trim())
     }
 
-    private fun exchangeCode(code: String, useLocalRedirect: Boolean) {
+    private fun exchangeCode(code: String) {
         val session = currentSession ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -218,12 +220,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 error = null,
             )
             try {
-                val redirectUri = if (useLocalRedirect) {
-                    REDIRECT_PREFIX
-                } else {
-                    com.kickstream.BuildConfig.KICK_REDIRECT_URI
-                }
-                authRepository.exchangeCodeForToken(code, session.codeVerifier, redirectUri)
+                // Always use the registered redirect URI for token exchange
+                authRepository.exchangeCodeForToken(code, session.codeVerifier)
                 _uiState.value = _uiState.value.copy(
                     isExchangingCode = false,
                     isSuccess = true,

@@ -4,9 +4,9 @@
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-    <!-- Dark background (standard TV card dark) -->
+    <!-- Dark background (near-black charcoal, matches app theme) -->
     <path
-        android:fillColor="#1A1A2E"
+        android:fillColor="#141414"
         android:pathData="M0,0h320v180H0z" />
     <!-- KICK wordmark centered (scaled to ~200x64, offset to center: x=(320-200)/2=60, y=(180-64)/2=58) -->
     <group

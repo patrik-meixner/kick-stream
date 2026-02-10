@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -106,6 +107,44 @@ object NetworkModule {
             .addConverterFactory(converterFactory)
             .build()
             .create(KickUnofficialApi::class.java)
+
+    // Typesense search at search.kick.com — public API key, no auth needed.
+    // Must replicate browser headers: text/plain Content-Type, Referer, Origin.
+    // The API key is public (same one the website uses in every request).
+    private val searchClient: OkHttpClient by lazy {
+        baseClient.newBuilder()
+            .addInterceptor(Interceptor { chain ->
+                val original = chain.request()
+                // Re-create the body with text/plain media type to match what the browser sends.
+                // Typesense proxied through Cloudflare rejects application/json Content-Type.
+                val body = original.body
+                val textPlain = "text/plain; charset=utf-8".toMediaType()
+                val newBody = if (body != null) {
+                    val buffer = okio.Buffer()
+                    body.writeTo(buffer)
+                    buffer.readByteString().toRequestBody(textPlain)
+                } else null
+                val request = original.newBuilder()
+                    .method(original.method, newBody)
+                    .header("X-Typesense-Api-Key", "nXIMW0iEN6sMujFYjFuhdrSwVow3pDQu")
+                    .header("Referer", "https://kick.com/")
+                    .header("Origin", "https://kick.com")
+                    .build()
+                chain.proceed(request)
+            })
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BODY
+            })
+            .build()
+    }
+
+    fun provideSearchApi(): KickSearchApi =
+        Retrofit.Builder()
+            .baseUrl("https://search.kick.com/")
+            .client(searchClient)
+            .addConverterFactory(converterFactory)
+            .build()
+            .create(KickSearchApi::class.java)
 
     // 7TV API -- no auth required, used for global + channel emotes
     private val sevenTvClient: OkHttpClient by lazy {

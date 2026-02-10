@@ -2,9 +2,7 @@ package com.kickstream.data.repository
 
 import android.util.Log
 import com.kickstream.data.api.KickApi
-import com.kickstream.data.api.KickUnofficialApi
 import com.kickstream.data.local.FavoritesStore
-import com.kickstream.data.local.TokenStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -22,15 +20,17 @@ data class FollowedChannel(
 )
 
 /**
- * Repository that provides followed channels from either:
- * 1. The unofficial Kick API (if the user's token works with it), or
- * 2. Local favorites enriched via the official API batch channel query.
+ * Repository that provides followed channels from local favorites
+ * enriched via the official API batch channel query.
+ *
+ * Note: The unofficial /api/v2/channels/followed endpoint requires
+ * cookie-based session auth (not OAuth), so we use local-only storage.
+ * The user follows/unfollows channels in-app via the Player screen's
+ * Follow button, and slugs are persisted in DataStore.
  */
 class FollowRepository(
-    private val unofficialApi: KickUnofficialApi,
     private val kickApi: KickApi,
     private val favoritesStore: FavoritesStore,
-    private val tokenStore: TokenStore,
 ) {
     companion object {
         private const val TAG = "KickStream"
@@ -46,63 +46,24 @@ class FollowRepository(
         favoritesStore.isFavorite(slug)
 
     /**
-     * Tries unofficial API first, falls back to local favorites enriched
-     * via official API.
+     * Loads locally followed channels, enriched with live status from the
+     * official API (GET /public/v1/channels?slug=a&slug=b) and profile
+     * pictures from the Users API (GET /public/v1/users?id=...).
      */
     suspend fun getFollowedChannels(): Result<List<FollowedChannel>> {
-        // Strategy 1: Try unofficial /api/v2/channels/followed (paginated)
-        try {
-            val token = tokenStore.getAccessToken()
-            if (token != null) {
-                val allChannels = mutableListOf<com.kickstream.data.api.model.UnofficialFollowedChannel>()
-                var cursor: Int? = null
-
-                // Fetch all pages (typically 1-2 for most users)
-                do {
-                    val response = unofficialApi.getFollowedChannels("Bearer $token", cursor)
-                    allChannels.addAll(response.channels)
-                    cursor = response.nextCursor
-                } while (cursor != null)
-
-                Log.d(TAG, "Unofficial followed API returned ${allChannels.size} channels")
-
-                // Sync server-side follows to local favorites
-                val slugs = allChannels.map { it.channelSlug }.toSet()
-                for (slug in slugs) {
-                    if (!favoritesStore.isFavorite(slug)) {
-                        favoritesStore.addFavorite(slug)
-                    }
-                }
-
-                return Result.success(allChannels.map { ch ->
-                    FollowedChannel(
-                        slug = ch.channelSlug,
-                        isLive = ch.isLive,
-                        streamTitle = ch.sessionTitle,
-                        viewerCount = ch.viewerCount,
-                        thumbnail = null, // New API doesn't include thumbnails
-                        profilePicture = ch.profilePicture,
-                        categoryName = ch.categoryName.takeIf { it?.isNotBlank() == true },
-                    )
-                })
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Unofficial followed API failed, using local fallback: ${e.message}")
-        }
-
-        // Strategy 2: Fall back to local favorites enriched via official API
-        return getLocalFollowedChannels()
-    }
-
-    private suspend fun getLocalFollowedChannels(): Result<List<FollowedChannel>> {
         return try {
             val slugs = favoritesStore.favoriteSlugs.first()
             if (slugs.isEmpty()) {
                 return Result.success(emptyList())
             }
 
-            // Official API supports batch slug query: GET /public/v1/channels?slug=a&slug=b
+            // Step 1: Batch channel query for live status, thumbnails, banners
             val response = kickApi.getChannelBySlug(slugs.toList())
+
+            // Step 2: Fetch profile pictures via Users API (uses broadcaster_user_id)
+            val userIds = response.data.map { it.broadcasterUserId }
+            val profilePicMap = fetchProfilePictures(userIds)
+
             val channels = response.data.map { ch ->
                 FollowedChannel(
                     slug = ch.slug,
@@ -110,7 +71,9 @@ class FollowRepository(
                     streamTitle = ch.streamTitle,
                     viewerCount = ch.stream?.viewerCount ?: 0,
                     thumbnail = ch.stream?.thumbnail,
-                    profilePicture = ch.bannerPicture,
+                    // Prefer profile picture (always available), fall back to banner
+                    profilePicture = profilePicMap[ch.broadcasterUserId]
+                        ?: ch.bannerPicture,
                     categoryName = ch.category?.name,
                 )
             }
@@ -145,6 +108,24 @@ class FollowRepository(
                     categoryName = null,
                 )
             })
+        }
+    }
+
+    /**
+     * Batch-fetch profile pictures from the Users API.
+     * Returns a map of userId → profilePictureUrl.
+     * Fails silently (returns empty map) so channels still load without images.
+     */
+    private suspend fun fetchProfilePictures(userIds: List<Int>): Map<Int, String> {
+        if (userIds.isEmpty()) return emptyMap()
+        return try {
+            val usersResponse = kickApi.getUsers(userIds)
+            usersResponse.data
+                .filter { it.profilePicture != null }
+                .associate { it.userId to it.profilePicture!! }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch profile pictures: ${e.message}")
+            emptyMap()
         }
     }
 }

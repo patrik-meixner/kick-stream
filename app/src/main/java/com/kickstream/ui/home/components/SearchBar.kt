@@ -34,12 +34,18 @@ import com.kickstream.ui.theme.OnDarkSurfaceVariant
 /**
  * TV-friendly search bar that allows D-pad navigation out of the text field.
  * Up/Down arrow keys move focus to adjacent items instead of being consumed.
- * Back key clears the query first, then moves focus up.
+ *
+ * Back/Escape key handling: On Android TV, when a soft keyboard backspace hits
+ * an empty text field, the IME's BaseInputConnection converts it to KEYCODE_BACK.
+ * We MUST consume this here to prevent the activity from finishing. The actual
+ * back-to-exit logic lives in HomeScreen's BackHandler (which only fires for
+ * real D-pad Back presses, not IME-generated ones intercepted here).
  */
 @Composable
 fun SearchBar(
     query: String,
     onQueryChanged: (String) -> Unit,
+    onBackPressed: () -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "Search streams...",
 ) {
@@ -91,14 +97,12 @@ fun SearchBar(
                             focusManager.moveFocus(FocusDirection.Up)
                             true
                         }
-                        Key.Back -> {
-                            if (query.isNotEmpty()) {
-                                onQueryChanged("")
-                                true
-                            } else {
-                                focusManager.moveFocus(FocusDirection.Up)
-                                true
-                            }
+                        // Consume Back key to prevent IME-generated back from
+                        // reaching the activity's OnBackPressedDispatcher.
+                        // Delegates actual back logic to the caller.
+                        Key.Back, Key.Escape -> {
+                            onBackPressed()
+                            true
                         }
                         else -> false
                     }

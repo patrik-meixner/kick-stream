@@ -11,6 +11,9 @@ import retrofit2.http.Query
  * Unofficial Kick.com web API -- used only for data not available
  * in the official API (chatroom ID, followed channels). Isolated here
  * for easy removal if/when official API adds these features.
+ *
+ * Note: Channel search uses Typesense (KickSearchApi) at search.kick.com,
+ * not the main kick.com domain.
  */
 interface KickUnofficialApi {
 

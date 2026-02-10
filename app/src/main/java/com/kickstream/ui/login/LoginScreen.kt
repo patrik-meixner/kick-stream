@@ -219,6 +219,12 @@ private fun KickAuthWebView(
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
+                    // Ensure the WebView fills its container (fix for TV emulator clipping)
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+
                     // Enable hardware acceleration for WebGL (needed by Kick's Kasada bot protection)
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
@@ -232,20 +238,40 @@ private fun KickAuthWebView(
                         "Mozilla/5.0 (Linux; Android 14; Chromecast HD) " +
                             "AppleWebKit/537.36 (KHTML, like Gecko) " +
                             "Chrome/131.0.0.0 Safari/537.36"
+                    // Viewport support so the login page renders at proper scale
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
 
                     webChromeClient = WebChromeClient()
 
                     webViewClient = object : WebViewClient() {
+                        private var callbackHandled = false
+
                         override fun shouldOverrideUrlLoading(
                             view: WebView?,
                             request: WebResourceRequest?,
                         ): Boolean {
                             val url = request?.url?.toString() ?: return false
-                            if (url.startsWith(LoginViewModel.REDIRECT_PREFIX)) {
+                            if (!callbackHandled && url.startsWith(LoginViewModel.REDIRECT_PREFIX)) {
+                                callbackHandled = true
                                 onCallbackReceived(url)
                                 return true
                             }
                             return false
+                        }
+
+                        // Safety net: some WebView implementations deliver
+                        // the OAuth redirect via page load, not navigation
+                        override fun onPageStarted(
+                            view: WebView?,
+                            url: String?,
+                            favicon: Bitmap?,
+                        ) {
+                            if (!callbackHandled && url != null && url.startsWith(LoginViewModel.REDIRECT_PREFIX)) {
+                                callbackHandled = true
+                                view?.stopLoading()
+                                onCallbackReceived(url)
+                            }
                         }
                     }
 
@@ -253,8 +279,8 @@ private fun KickAuthWebView(
                 }
             },
             modifier = Modifier
-                .fillMaxSize()
-                .weight(1f),
+                .weight(1f)
+                .fillMaxWidth(),
         )
     }
 }

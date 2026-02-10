@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Chat bubble with strikethrough line -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,2H4C2.9,2 2.01,2.9 2.01,4L2,22l4,-4h14c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zM6,9h12v2H6V9zM14,14H6v-2h8v2zM18,8H6V6h12v2z" />
+    <!-- Diagonal strikethrough -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M2.5,1.5L1.4,2.65 21.35,22.6l1.15,-1.15z"
+        android:strokeWidth="0"
+        android:strokeColor="#00000000" />
+    <!-- Semi-transparent overlay to dim the chat bubble -->
+    <path
+        android:fillColor="#00000060"
+        android:pathData="M20,2H4C2.9,2 2.01,2.9 2.01,4L2,22l4,-4h14c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2z" />
+    <!-- Bold diagonal strike line -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M1.79,1.11L0.72,2.18 21.82,23.28l1.07,-1.07z" />
+</vector>

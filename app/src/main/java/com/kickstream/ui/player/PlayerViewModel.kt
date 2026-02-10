@@ -32,7 +32,8 @@ data class PlayerUiState(
     val chatMessages: List<ParsedChatMessage> = emptyList(),
     /** Maps subscriber badge months → custom badge image URL from the channel */
     val subscriberBadgeUrls: Map<Int, String> = emptyMap(),
-    val isChatVisible: Boolean = true,
+    val isChatVisible: Boolean = false,
+    val isOffline: Boolean = false,
     val isFollowed: Boolean = false,
     val showControls: Boolean = false,
     val isBuffering: Boolean = false,
@@ -116,15 +117,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val viewerCount = channel?.stream?.viewerCount ?: 0
                 val categoryName = channel?.category?.name
 
-                if (hlsUrl.isNullOrBlank() && channel?.stream?.isLive != true) {
-                    Log.w(TAG, "No HLS URL and not live -- showing error")
-                    _uiState.value = PlayerUiState(
-                        isLoading = false,
-                        channelName = slug,
-                        isFollowed = isFollowed,
-                        error = "Channel is not live",
-                    )
-                    return@launch
+                val isOffline = hlsUrl.isNullOrBlank() && channel?.stream?.isLive != true
+                if (isOffline) {
+                    Log.d(TAG, "Channel is offline, showing offline screen")
                 }
 
                 Log.d(TAG, "Final HLS URL: $hlsUrl, chatroomId: $chatroomId")
@@ -137,10 +132,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     hlsUrl = hlsUrl,
                     chatroomId = chatroomId,
                     subscriberBadgeUrls = subBadgeUrls,
+                    isOffline = isOffline,
                     isFollowed = isFollowed,
                 )
 
-                // Step 3: Load 7TV emotes concurrently (non-blocking for stream playback)
+                // Load 7TV emotes concurrently (non-blocking for stream playback)
                 if (currentKickUserId > 0) {
                     loadEmotes(currentKickUserId)
                 }

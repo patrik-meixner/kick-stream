@@ -39,8 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
+import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kickstream.R
@@ -135,6 +136,101 @@ fun PlayerScreen(
                 }
             }
 
+            uiState.isOffline -> {
+                // Offline channel: no video, but chat + follow still available
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = uiState.channelName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = "Offline",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .background(
+                                        Color.White.copy(alpha = 0.1f),
+                                        RoundedCornerShape(4.dp),
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Follow button
+                                IconButton(
+                                    onClick = { viewModel.toggleFollow() },
+                                    colors = IconButtonDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        contentColor = if (uiState.isFollowed) KickGreen else Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                                        focusedContentColor = if (uiState.isFollowed) KickGreen else Color.White,
+                                    ),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (uiState.isFollowed) R.drawable.ic_star_filled
+                                            else R.drawable.ic_star_outline,
+                                        ),
+                                        contentDescription = if (uiState.isFollowed) "Unfollow" else "Follow",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+
+                                // Chat toggle button
+                                IconButton(
+                                    onClick = { viewModel.toggleChat() },
+                                    colors = IconButtonDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        contentColor = Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                                        focusedContentColor = Color.White,
+                                    ),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (uiState.isChatVisible) R.drawable.ic_chat
+                                            else R.drawable.ic_chat_off,
+                                        ),
+                                        contentDescription = if (uiState.isChatVisible) "Hide chat" else "Show chat",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Chat sidebar (still works for offline channels)
+                    AnimatedVisibility(
+                        visible = uiState.isChatVisible,
+                        enter = slideInHorizontally(initialOffsetX = { it }),
+                        exit = slideOutHorizontally(targetOffsetX = { it }),
+                    ) {
+                        ChatSidebar(
+                            messages = uiState.chatMessages,
+                            subscriberBadgeUrls = uiState.subscriberBadgeUrls,
+                            modifier = Modifier.width(280.dp),
+                        )
+                    }
+                }
+            }
+
             uiState.hlsUrl != null -> {
                 // Main content: Video + Chat
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -160,35 +256,30 @@ fun PlayerScreen(
                     }
                 }
 
-                // Controls overlay
+                // Controls overlay (full-screen: top gradient for info, bottom gradient for buttons)
                 AnimatedVisibility(
                     visible = uiState.showControls,
                     enter = fadeIn(),
                     exit = fadeOut(),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Black.copy(alpha = 0.9f),
-                                        Color.Black.copy(alpha = 0.6f),
-                                        Color.Transparent,
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // ── Top section: channel info ──
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopStart)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Black.copy(alpha = 0.9f),
+                                            Color.Black.copy(alpha = 0.6f),
+                                            Color.Transparent,
+                                        ),
                                     ),
-                                ),
-                            )
-                            .padding(horizontal = 32.dp, vertical = 20.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top,
+                                )
+                                .padding(horizontal = 32.dp, vertical = 20.dp),
                         ) {
-                            // Left side: channel info
-                            Column(
-                                modifier = Modifier.weight(1f),
-                            ) {
+                            Column {
                                 // Channel name
                                 Text(
                                     text = uiState.channelName,
@@ -261,20 +352,78 @@ fun PlayerScreen(
                                     }
                                 }
                             }
+                        }
 
-                            Spacer(Modifier.width(16.dp))
-
-                            // Right side: Follow button
-                            Button(
-                                onClick = { viewModel.toggleFollow() },
-                                shape = ButtonDefaults.shape(
-                                    shape = RoundedCornerShape(8.dp),
-                                ),
-                            ) {
-                                Text(
-                                    text = if (uiState.isFollowed) "Unfollow" else "Follow",
-                                    style = MaterialTheme.typography.labelMedium,
+                        // ── Bottom section: action buttons (Follow + Chat toggle) ──
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomStart)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.6f),
+                                            Color.Black.copy(alpha = 0.9f),
+                                        ),
+                                    ),
                                 )
+                                .padding(horizontal = 32.dp, vertical = 16.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Follow / Unfollow button (star)
+                                IconButton(
+                                    onClick = {
+                                        viewModel.toggleFollow()
+                                        viewModel.showControls() // reset auto-hide timer
+                                    },
+                                    colors = IconButtonDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        contentColor = if (uiState.isFollowed) KickGreen else Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                                        focusedContentColor = if (uiState.isFollowed) KickGreen else Color.White,
+                                    ),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (uiState.isFollowed) R.drawable.ic_star_filled
+                                            else R.drawable.ic_star_outline,
+                                        ),
+                                        contentDescription = if (uiState.isFollowed) "Unfollow" else "Follow",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                // Chat visibility toggle button (chat bubble)
+                                IconButton(
+                                    onClick = {
+                                        viewModel.toggleChat()
+                                        viewModel.showControls() // reset auto-hide timer
+                                    },
+                                    colors = IconButtonDefaults.colors(
+                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        contentColor = Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.3f),
+                                        focusedContentColor = Color.White,
+                                    ),
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (uiState.isChatVisible) R.drawable.ic_chat
+                                            else R.drawable.ic_chat_off,
+                                        ),
+                                        contentDescription = if (uiState.isChatVisible) "Hide chat" else "Show chat",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }

@@ -1,5 +1,7 @@
 package com.kickstream.ui.home
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,14 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import android.app.Activity
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,9 +37,9 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.kickstream.R
+import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.components.KickLoader
 import com.kickstream.ui.home.components.FollowedChannelCard
-import com.kickstream.ui.home.components.LiveChannelCard
 import com.kickstream.ui.home.components.SearchBar
 
 @Composable
@@ -57,7 +55,7 @@ fun HomeScreen(
             KickLoader()
         }
 
-        uiState.error != null && uiState.livestreams.isEmpty() && uiState.followedChannels.isEmpty() -> {
+        uiState.error != null && uiState.followedChannels.isEmpty() -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -75,8 +73,13 @@ fun HomeScreen(
 
         else -> {
             val context = LocalContext.current
-            BackHandler {
-                (context as? Activity)?.finish()
+            // BackHandler covers real D-pad Back presses when search is active.
+            // When search is NOT active, we don't enable it — the default
+            // activity back behavior (finish) takes over.
+            BackHandler(
+                enabled = uiState.searchQuery.isNotEmpty() || uiState.searchResults != null,
+            ) {
+                viewModel.clearSearch()
             }
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) {
@@ -84,7 +87,6 @@ fun HomeScreen(
             }
 
             val isSearching = uiState.searchResults != null
-            val displayStreams = uiState.searchResults ?: uiState.livestreams
 
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 260.dp),
@@ -95,7 +97,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // 0. Header: KICK logo + Logout button
+                // Header: KICK logo + Logout button
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Row(
                         modifier = Modifier
@@ -122,36 +124,44 @@ fun HomeScreen(
                     }
                 }
 
-                // 1. Search bar (full-width)
+                // Search bar (full-width) — search by channel slug
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SearchBar(
                         query = uiState.searchQuery,
                         onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                        onBackPressed = {
+                            if (uiState.searchQuery.isNotEmpty() || uiState.searchResults != null) {
+                                viewModel.clearSearch()
+                            } else {
+                                (context as? Activity)?.finish()
+                            }
+                        },
                         modifier = Modifier
                             .padding(bottom = 8.dp)
                             .focusRequester(focusRequester),
                     )
                 }
 
-                // When searching, only show search results
                 if (isSearching) {
+                    // ── Search results ──────────────────────────────
+                    val results = uiState.searchResults!!
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
-                            text = if (displayStreams.isEmpty()) "No results for \"${uiState.searchQuery}\""
-                            else "Results for \"${uiState.searchQuery}\"",
+                            text = if (results.isEmpty()) "No channels found for \"${uiState.searchQuery}\""
+                            else "Search results",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                     }
 
-                    items(displayStreams, key = { it.broadcasterUserId }) { stream ->
-                        LiveChannelCard(
-                            stream = stream,
-                            onClick = { onChannelSelected(stream.slug) },
+                    items(results, key = { it.slug }) { channel ->
+                        FollowedChannelCard(
+                            channel = channel,
+                            onClick = { onChannelSelected(channel.slug) },
                         )
                     }
                 } else {
-                    // 2. Followed Channels section (if any)
+                    // ── Followed Channels (default view) ────────────
                     if (uiState.followedChannels.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
@@ -161,61 +171,40 @@ fun HomeScreen(
                             )
                         }
 
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(bottom = 8.dp),
-                            ) {
-                                items(
-                                    uiState.followedChannels,
-                                    key = { it.slug },
-                                ) { channel ->
-                                    FollowedChannelCard(
-                                        channel = channel,
-                                        onClick = { onChannelSelected(channel.slug) },
-                                    )
-                                }
-                            }
+                        items(
+                            uiState.followedChannels,
+                            key = { it.slug },
+                        ) { channel ->
+                            FollowedChannelCard(
+                                channel = channel,
+                                onClick = { onChannelSelected(channel.slug) },
+                            )
                         }
-
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-
-                    // 3. "Live on Kick" section header
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = "Live on Kick",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
-
-                    // 4. Grid of live stream cards
-                    if (uiState.livestreams.isEmpty()) {
+                    } else {
+                        // No followed channels yet — empty state
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 64.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 Text(
-                                    text = "No live streams right now",
+                                    text = "No followed channels yet",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = "Search for a channel above, then follow it from the player",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(24.dp))
                                 Button(onClick = { viewModel.refresh() }) {
                                     Text("Refresh")
                                 }
                             }
-                        }
-                    } else {
-                        items(uiState.livestreams, key = { it.broadcasterUserId }) { stream ->
-                            LiveChannelCard(
-                                stream = stream,
-                                onClick = { onChannelSelected(stream.slug) },
-                            )
                         }
                     }
                 }

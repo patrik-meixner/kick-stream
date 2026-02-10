@@ -9,7 +9,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,8 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
@@ -49,7 +52,7 @@ fun FollowedChannelCard(
         scale = CardDefaults.scale(
             focusedScale = 1.05f,
         ),
-        modifier = Modifier.width(200.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
             // Compact thumbnail area
@@ -58,15 +61,33 @@ fun FollowedChannelCard(
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
-                val thumbnailUrl = channel.thumbnail
-                if (thumbnailUrl != null) {
+                // Image priority: live thumbnail > banner/profile picture > initial letter
+                val imageUrl = channel.thumbnail ?: channel.profilePicture
+                if (imageUrl != null) {
                     AsyncImage(
-                        model = thumbnailUrl,
+                        model = imageUrl,
                         contentDescription = channel.slug,
                         modifier = Modifier.matchParentSize(),
                         contentScale = ContentScale.Crop,
                     )
+                } else {
+                    // No image available — show styled initial letter in a circle
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(KickGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = channel.slug.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = KickGreen,
+                        )
+                    }
                 }
 
                 // Live/Offline indicator

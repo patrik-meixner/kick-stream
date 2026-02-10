@@ -39,7 +39,7 @@ fun KickLoader(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Image(
-            painter = painterResource(id = R.drawable.ic_launcher),
+            painter = painterResource(id = R.drawable.ic_kick_k),
             contentDescription = "Loading",
             modifier = Modifier
                 .size(80.dp)
