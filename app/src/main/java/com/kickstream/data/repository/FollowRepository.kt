@@ -50,30 +50,39 @@ class FollowRepository(
      * via official API.
      */
     suspend fun getFollowedChannels(): Result<List<FollowedChannel>> {
-        // Strategy 1: Try unofficial /api/v2/channels/followed
+        // Strategy 1: Try unofficial /api/v2/channels/followed (paginated)
         try {
             val token = tokenStore.getAccessToken()
             if (token != null) {
-                val channels = unofficialApi.getFollowedChannels("Bearer $token")
-                Log.d(TAG, "Unofficial followed API returned ${channels.size} channels")
+                val allChannels = mutableListOf<com.kickstream.data.api.model.UnofficialFollowedChannel>()
+                var cursor: Int? = null
+
+                // Fetch all pages (typically 1-2 for most users)
+                do {
+                    val response = unofficialApi.getFollowedChannels("Bearer $token", cursor)
+                    allChannels.addAll(response.channels)
+                    cursor = response.nextCursor
+                } while (cursor != null)
+
+                Log.d(TAG, "Unofficial followed API returned ${allChannels.size} channels")
 
                 // Sync server-side follows to local favorites
-                val slugs = channels.map { it.slug }.toSet()
+                val slugs = allChannels.map { it.channelSlug }.toSet()
                 for (slug in slugs) {
                     if (!favoritesStore.isFavorite(slug)) {
                         favoritesStore.addFavorite(slug)
                     }
                 }
 
-                return Result.success(channels.map { ch ->
+                return Result.success(allChannels.map { ch ->
                     FollowedChannel(
-                        slug = ch.slug,
-                        isLive = ch.livestream?.isLive ?: false,
-                        streamTitle = ch.livestream?.sessionTitle,
-                        viewerCount = ch.livestream?.viewers ?: 0,
-                        thumbnail = ch.livestream?.thumbnail?.url,
-                        profilePicture = ch.user?.profilePic,
-                        categoryName = ch.livestream?.categories?.firstOrNull()?.name,
+                        slug = ch.channelSlug,
+                        isLive = ch.isLive,
+                        streamTitle = ch.sessionTitle,
+                        viewerCount = ch.viewerCount,
+                        thumbnail = null, // New API doesn't include thumbnails
+                        profilePicture = ch.profilePicture,
+                        categoryName = ch.categoryName.takeIf { it?.isNotBlank() == true },
                     )
                 })
             }

@@ -38,44 +38,22 @@ data class UnofficialBadgeImage(
 
 /**
  * DTO for the unofficial /api/v2/channels/followed endpoint.
- * The response is a list of these objects. All fields are optional
- * except slug, since the format may change.
+ * Response is paginated: { nextCursor, channels: [...] }
+ * Each channel has flattened fields (no nested user/livestream objects).
  */
 @Serializable
+data class UnofficialFollowedResponse(
+    @SerialName("nextCursor") val nextCursor: Int? = null,
+    val channels: List<UnofficialFollowedChannel> = emptyList(),
+)
+
+@Serializable
 data class UnofficialFollowedChannel(
-    val id: Int? = null,
-    val slug: String,
-    @SerialName("user_id") val userId: Int? = null,
-    @SerialName("is_banned") val isBanned: Boolean = false,
-    @SerialName("playback_url") val playbackUrl: String? = null,
-    @SerialName("vod_enabled") val vodEnabled: Boolean = false,
-    val user: UnofficialUser? = null,
-    val livestream: UnofficialLivestream? = null,
-)
-
-@Serializable
-data class UnofficialUser(
-    val username: String? = null,
-    @SerialName("profile_pic") val profilePic: String? = null,
-)
-
-@Serializable
-data class UnofficialLivestream(
-    val id: Int? = null,
-    @SerialName("session_title") val sessionTitle: String? = null,
+    @SerialName("channel_slug") val channelSlug: String,
+    @SerialName("user_username") val userUsername: String? = null,
     @SerialName("is_live") val isLive: Boolean = false,
-    val viewers: Int = 0,
-    val thumbnail: UnofficialThumbnail? = null,
-    val categories: List<UnofficialCategory>? = null,
-)
-
-@Serializable
-data class UnofficialThumbnail(
-    val url: String? = null,
-)
-
-@Serializable
-data class UnofficialCategory(
-    val id: Int? = null,
-    val name: String? = null,
+    @SerialName("viewer_count") val viewerCount: Int = 0,
+    @SerialName("session_title") val sessionTitle: String? = null,
+    @SerialName("profile_picture") val profilePicture: String? = null,
+    @SerialName("category_name") val categoryName: String? = null,
 )
