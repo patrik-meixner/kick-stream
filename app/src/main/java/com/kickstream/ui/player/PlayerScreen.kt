@@ -71,6 +71,11 @@ fun PlayerScreen(
             .fillMaxSize()
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
+                    // Reset auto-hide timer on any key press while controls are visible
+                    if (uiState.showControls) {
+                        viewModel.showControls()
+                    }
+
                     when (keyEvent.key) {
                         Key.Menu -> {
                             viewModel.toggleChat()
