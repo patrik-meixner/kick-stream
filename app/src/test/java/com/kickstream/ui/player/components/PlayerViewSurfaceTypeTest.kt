@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 class PlayerViewSurfaceTypeTest {
     @Test
     fun playerViewDefaultsTextureView() {
-        // Inflate view_player.xml and verify it uses TextureView (not SurfaceView).
+        // Inflate view_player.xml and verify it uses TextureView.
         // This matches how VideoPlayer.kt inflates the layout at runtime.
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val playerView = LayoutInflater.from(context)

@@ -18,13 +18,13 @@ class VideoPlayerQualitySwitchPolicyTest {
     }
 
     @Test
-    fun qualityChangeRecreatesPlayerView() {
-        assertTrue(shouldRecreatePlayerViewOnQualitySwitch(previousHeight = 1080, resolvedHeight = 720))
-        assertTrue(shouldRecreatePlayerViewOnQualitySwitch(previousHeight = 720, resolvedHeight = 480))
+    fun qualityChangeDoesNotRecreatePlayerView() {
+        assertFalse(shouldRecreatePlayerViewOnQualitySwitch(previousHeight = 1080, resolvedHeight = 720))
+        assertFalse(shouldRecreatePlayerViewOnQualitySwitch(previousHeight = 720, resolvedHeight = 480))
     }
 
     @Test
-    fun initialSelectionDoesNotRecreatePlayerView() {
+    fun initialSelectionAlsoDoesNotRecreatePlayerView() {
         assertFalse(shouldRecreatePlayerViewOnQualitySwitch(previousHeight = null, resolvedHeight = 720))
     }
 
