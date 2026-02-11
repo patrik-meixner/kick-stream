@@ -24,7 +24,6 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -233,27 +232,6 @@ fun VideoPlayer(
     }
 }
 
-/**
- * Policy hook kept explicit so regressions are caught in tests:
- * manual surface rebinding during quality switch is forbidden.
- */
-@Suppress("UNUSED_PARAMETER")
-internal fun shouldRebindVideoSurfaceOnQualitySwitch(
-    previousHeight: Int?,
-    resolvedHeight: Int,
-): Boolean = false
-
-@Suppress("UNUSED_PARAMETER")
-internal fun shouldForceLiveEdgeSeekOnQualitySwitch(
-    previousHeight: Int?,
-    resolvedHeight: Int,
-): Boolean = false
-
-internal fun shouldRecreatePlayerViewOnQualitySwitch(
-    previousHeight: Int?,
-    resolvedHeight: Int,
-): Boolean = false
-
 /** Extract available video qualities from ExoPlayer track groups */
 private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<VideoQuality> {
     val heights = mutableSetOf<Int>()
@@ -290,30 +268,6 @@ private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<V
         )
     }
     return qualities
-}
-
-internal fun shouldReapplyQualityConstraint(
-    lastAppliedHeight: Int?,
-    targetHeight: Int,
-    previousTrackSignature: String?,
-    currentTrackSignature: String,
-): Boolean {
-    if (lastAppliedHeight != targetHeight) return true
-    return previousTrackSignature != currentTrackSignature
-}
-
-private fun buildVideoTrackSignature(tracks: Tracks): String {
-    val groups = mutableListOf<String>()
-    for (group in tracks.groups) {
-        if (group.type != C.TRACK_TYPE_VIDEO) continue
-        val formats = mutableListOf<String>()
-        for (i in 0 until group.length) {
-            val format = group.getTrackFormat(i)
-            formats += "${format.id ?: "no-id"}:${format.width}x${format.height}@${format.bitrate}"
-        }
-        groups += formats.joinToString(separator = ",")
-    }
-    return groups.joinToString(separator = "|")
 }
 
 private fun ensurePlayerViewFillsBounds(playerView: PlayerView?) {
@@ -401,37 +355,5 @@ private fun applyInitialQualityPreference(player: ExoPlayer, height: Int) {
         params.setMaxVideoSize(Int.MAX_VALUE, height)
         Log.d(TAG, "Quality: prefer max height ${height}p (initial)")
     }
-    player.trackSelectionParameters = params.build()
-}
-
-private fun applyQualityConstraint(player: ExoPlayer, height: Int) {
-    val params = player.trackSelectionParameters.buildUpon()
-        // Always clear previous constraints — we use overrides instead
-        .setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
-        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-
-    if (height == 0) {
-        Log.d(TAG, "Quality: Auto (no constraints)")
-    } else {
-        // Find the video track group and the specific track index matching the height
-        val tracks = player.currentTracks
-        for (group in tracks.groups) {
-            if (group.type != C.TRACK_TYPE_VIDEO) continue
-            for (i in 0 until group.length) {
-                val format = group.getTrackFormat(i)
-                if (format.height == height) {
-                    val override = TrackSelectionOverride(group.mediaTrackGroup, i)
-                    params.addOverride(override)
-                    Log.d(TAG, "Quality: override to ${format.width}x${format.height} (track $i)")
-                    player.trackSelectionParameters = params.build()
-                    return
-                }
-            }
-        }
-        // Fallback: if exact track not found, use maxVideoSize as hint
-        params.setMaxVideoSize(Int.MAX_VALUE, height)
-        Log.d(TAG, "Quality: max height ${height}p (fallback, no exact track match)")
-    }
-
     player.trackSelectionParameters = params.build()
 }
