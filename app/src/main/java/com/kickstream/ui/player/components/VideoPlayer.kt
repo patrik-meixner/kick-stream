@@ -4,6 +4,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.SurfaceView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,8 +77,10 @@ fun VideoPlayer(
     val lastTracksRef = remember { Ref<Tracks?>(null) }
     val retryCountRef = remember { Ref(0) }
     val lastAppliedHeightRef = remember { Ref<Int?>(null) }
-    // Reference to the PlayerView's SurfaceView for surface clear during quality switch
+    // Reference to the PlayerView for accessing its SurfaceView during quality switch
     val playerViewRef = remember { Ref<PlayerView?>(null) }
+    // Reference to the internal AspectRatioFrameLayout for manual aspect ratio restore
+    val contentFrameRef = remember { Ref<AspectRatioFrameLayout?>(null) }
     // Black shutter overlay: shown during quality switch, dismissed on onVideoSizeChanged
     val shutterVisible = remember { mutableStateOf(false) }
 
@@ -174,36 +179,45 @@ fun VideoPlayer(
             // (e.g., same-resolution tracks with different bitrates)
             mainHandler.postDelayed({ shutterVisible.value = false }, SHUTTER_TIMEOUT_MS)
 
-            // Flush the old decoder's frames from the SurfaceView hardware layer
-            // to prevent ghost/phantom streams during codec transition.
-            // Steps: (1) disconnect ExoPlayer from the surface, (2) force-clear
-            // the SurfaceView buffer via pixel format toggle, (3) apply the new
-            // track override, (4) rebind ExoPlayer to the surface.
-            // NOTE: we do NOT use pv.player = null/reattach — that breaks
-            // AspectRatioFrameLayout sizing and causes the video to shrink.
-            val pv = playerViewRef.value
-            val surfaceView = pv?.videoSurfaceView as? android.view.SurfaceView
-
-            exoPlayer.clearVideoSurface()
-
-            // Force SurfaceView to discard its buffered frames by toggling the
-            // surface holder's pixel format. This causes the surface to be
-            // recreated, flushing any stale frames from previous decoders.
-            if (surfaceView != null) {
-                val holder = surfaceView.holder
-                holder.setFormat(android.graphics.PixelFormat.TRANSPARENT)
-                holder.setFormat(android.graphics.PixelFormat.OPAQUE)
+            // 1. Save current aspect ratio BEFORE codec transition.
+            //    After the codec resets, videoSize may temporarily report 0×0.
+            val vs = exoPlayer.videoSize
+            val savedAspectRatio = if (vs.height > 0 && vs.width > 0) {
+                (vs.width * vs.pixelWidthHeightRatio) / vs.height
+            } else {
+                0f
             }
 
+            // 2. Apply the track override (triggers codec reset internally)
             applyQualityConstraint(exoPlayer, resolvedHeight)
 
-            // Rebind ExoPlayer to the surface on the next frame — gives the
-            // decoder time to flush and the surface to reset.
-            if (surfaceView != null) {
-                mainHandler.post {
-                    exoPlayer.setVideoSurfaceView(surfaceView)
-                }
+            // 3. Flush ghost frames by disconnecting/reconnecting the Surface
+            //    directly on ExoPlayer — this bypasses PlayerView entirely, so
+            //    PlayerView.updateAspectRatio() is NEVER called (no sizing
+            //    collapse). SurfaceFlinger releases the old buffer when the
+            //    producer disconnects, eliminating the ghost frame.
+            val sv = playerViewRef.value?.videoSurfaceView as? SurfaceView
+            if (sv != null) {
+                exoPlayer.clearVideoSurfaceView(sv)
+                exoPlayer.setVideoSurfaceView(sv)
             }
+
+            // 4. Restore aspect ratio on the content frame as a safety net.
+            //    Since we bypassed PlayerView, updateAspectRatio() was not
+            //    called — but the codec transition might have briefly reported
+            //    VideoSize.UNKNOWN through PlayerView's internal listener.
+            if (savedAspectRatio > 0f) {
+                contentFrameRef.value?.setAspectRatio(savedAspectRatio)
+            }
+
+            // 5. Seek to live edge to get fresh frames at the new quality.
+            //    This forces the new codec to output frames immediately rather
+            //    than waiting for the next keyframe in the buffer.
+            mainHandler.postDelayed({
+                if (exoPlayer.isCurrentMediaItemLive) {
+                    exoPlayer.seekToDefaultPosition()
+                }
+            }, 100)
         } else {
             applyQualityConstraint(exoPlayer, resolvedHeight)
         }
@@ -253,12 +267,24 @@ fun VideoPlayer(
                 val view = LayoutInflater.from(ctx)
                     .inflate(R.layout.view_player, null) as PlayerView
                 view.apply {
+                    // CRITICAL: inflate(…, null) discards XML layout params.
+                    // Without explicit MATCH_PARENT the PlayerView collapses to
+                    // the video's native resolution after a codec transition
+                    // (quality switch) because AspectRatioFrameLayout has no
+                    // parent-size reference to stretch against.
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
                     player = exoPlayer
                     useController = false // TV uses D-pad, not on-screen controls
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     // Don't keep the last frame when player resets — avoids stale frame flash
                     setKeepContentOnPlayerReset(false)
                     playerViewRef.value = this
+                    contentFrameRef.value = findViewById(
+                        androidx.media3.ui.R.id.exo_content_frame,
+                    )
                 }
             },
             modifier = Modifier.fillMaxSize(),
