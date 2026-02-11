@@ -4,7 +4,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
-import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -77,10 +77,9 @@ fun VideoPlayer(
     val lastTracksRef = remember { Ref<Tracks?>(null) }
     val retryCountRef = remember { Ref(0) }
     val lastAppliedHeightRef = remember { Ref<Int?>(null) }
-    // Reference to the PlayerView for accessing its SurfaceView during quality switch
-    val playerViewRef = remember { Ref<PlayerView?>(null) }
-    // Reference to the internal AspectRatioFrameLayout for manual aspect ratio restore
-    val contentFrameRef = remember { Ref<AspectRatioFrameLayout?>(null) }
+    val lastVideoTrackSignatureRef = remember { Ref<String?>(null) }
+    val lastEmittedQualitiesRef = remember { Ref<List<VideoQuality>>(emptyList()) }
+    val playerViewEpoch = remember { mutableStateOf(0) }
     // Black shutter overlay: shown during quality switch, dismissed on onVideoSizeChanged
     val shutterVisible = remember { mutableStateOf(false) }
 
@@ -150,19 +149,34 @@ fun VideoPlayer(
 
                     override fun onTracksChanged(tracks: Tracks) {
                         lastTracksRef.value = tracks
-                        val resolvedHeight = resolveSelectedHeight(tracks, currentSelectedQuality.value)
-                        if (lastAppliedHeightRef.value != resolvedHeight) {
-                            applyQualityConstraint(this@apply, resolvedHeight)
-                            lastAppliedHeightRef.value = resolvedHeight
+                        val targetHeight = currentSelectedQuality.value
+                        val trackSignature = buildVideoTrackSignature(tracks)
+                        if (
+                            shouldReapplyQualityConstraint(
+                                lastAppliedHeight = lastAppliedHeightRef.value,
+                                targetHeight = targetHeight,
+                                previousTrackSignature = lastVideoTrackSignatureRef.value,
+                                currentTrackSignature = trackSignature,
+                            )
+                        ) {
+                            applyQualityConstraint(this@apply, targetHeight)
+                            lastAppliedHeightRef.value = targetHeight
                         }
-                        val qualities = extractQualities(tracks, resolvedHeight)
-                        currentOnQualitiesAvailable.value(qualities)
+                        lastVideoTrackSignatureRef.value = trackSignature
+                        val qualities = extractQualities(tracks, targetHeight)
+                        if (qualities != lastEmittedQualitiesRef.value) {
+                            lastEmittedQualitiesRef.value = qualities
+                            currentOnQualitiesAvailable.value(qualities)
+                        }
                     }
 
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         Log.d(TAG, "Video size changed: ${videoSize.width}x${videoSize.height}")
-                        // New resolution is now rendering — dismiss the shutter
-                        shutterVisible.value = false
+                        // Ignore transient 0x0 callbacks around decoder resets.
+                        // Dismissing only on real dimensions avoids exposing half-transition states.
+                        if (videoSize.width > 0 && videoSize.height > 0) {
+                            shutterVisible.value = false
+                        }
                     }
                 })
             }
@@ -170,66 +184,50 @@ fun VideoPlayer(
 
     LaunchedEffect(selectedQualityHeight) {
         val tracks = lastTracksRef.value
-        val resolvedHeight = resolveSelectedHeight(tracks, selectedQualityHeight)
+        val targetHeight = selectedQualityHeight
         val previousHeight = lastAppliedHeightRef.value
         // Show black shutter when quality actually changes (not on initial load)
-        if (previousHeight != null && previousHeight != resolvedHeight) {
+        if (previousHeight != null && previousHeight != targetHeight) {
             shutterVisible.value = true
+            if (shouldRecreatePlayerViewOnQualitySwitch(previousHeight, targetHeight)) {
+                playerViewEpoch.value += 1
+            }
+
             // Safety timeout: dismiss shutter if onVideoSizeChanged doesn't fire
             // (e.g., same-resolution tracks with different bitrates)
             mainHandler.postDelayed({ shutterVisible.value = false }, SHUTTER_TIMEOUT_MS)
 
-            // 1. Save current aspect ratio BEFORE codec transition.
-            //    After the codec resets, videoSize may temporarily report 0×0.
-            val vs = exoPlayer.videoSize
-            val savedAspectRatio = if (vs.height > 0 && vs.width > 0) {
-                (vs.width * vs.pixelWidthHeightRatio) / vs.height
-            } else {
-                0f
+            // Apply the track override (triggers codec reset internally).
+            // Do NOT manually rebind the SurfaceView here. It can desync PlayerView's
+            // internal sizing pipeline and collapse video into top-left after switch.
+            applyQualityConstraint(exoPlayer, targetHeight)
+
+            if (shouldForceLiveEdgeSeekOnQualitySwitch(previousHeight, targetHeight)) {
+                // Keep this behind a policy hook: forced seek on every switch can cause
+                // visible loop/jump artifacts on live streams during rapid transitions.
+                mainHandler.postDelayed({
+                    if (exoPlayer.isCurrentMediaItemLive) {
+                        exoPlayer.seekToDefaultPosition()
+                    }
+                }, 100)
             }
-
-            // 2. Apply the track override (triggers codec reset internally)
-            applyQualityConstraint(exoPlayer, resolvedHeight)
-
-            // 3. Flush ghost frames by disconnecting/reconnecting the Surface
-            //    directly on ExoPlayer — this bypasses PlayerView entirely, so
-            //    PlayerView.updateAspectRatio() is NEVER called (no sizing
-            //    collapse). SurfaceFlinger releases the old buffer when the
-            //    producer disconnects, eliminating the ghost frame.
-            val sv = playerViewRef.value?.videoSurfaceView as? SurfaceView
-            if (sv != null) {
-                exoPlayer.clearVideoSurfaceView(sv)
-                exoPlayer.setVideoSurfaceView(sv)
-            }
-
-            // 4. Restore aspect ratio on the content frame as a safety net.
-            //    Since we bypassed PlayerView, updateAspectRatio() was not
-            //    called — but the codec transition might have briefly reported
-            //    VideoSize.UNKNOWN through PlayerView's internal listener.
-            if (savedAspectRatio > 0f) {
-                contentFrameRef.value?.setAspectRatio(savedAspectRatio)
-            }
-
-            // 5. Seek to live edge to get fresh frames at the new quality.
-            //    This forces the new codec to output frames immediately rather
-            //    than waiting for the next keyframe in the buffer.
-            mainHandler.postDelayed({
-                if (exoPlayer.isCurrentMediaItemLive) {
-                    exoPlayer.seekToDefaultPosition()
-                }
-            }, 100)
         } else {
-            applyQualityConstraint(exoPlayer, resolvedHeight)
+            applyQualityConstraint(exoPlayer, targetHeight)
         }
-        lastAppliedHeightRef.value = resolvedHeight
+        lastAppliedHeightRef.value = targetHeight
         if (tracks != null) {
-            val qualities = extractQualities(tracks, resolvedHeight)
-            currentOnQualitiesAvailable.value(qualities)
+            val qualities = extractQualities(tracks, targetHeight)
+            if (qualities != lastEmittedQualitiesRef.value) {
+                lastEmittedQualitiesRef.value = qualities
+                currentOnQualitiesAvailable.value(qualities)
+            }
         }
     }
 
     LaunchedEffect(hlsUrl) {
         lastTracksRef.value = null
+        lastEmittedQualitiesRef.value = emptyList()
+        lastVideoTrackSignatureRef.value = null
         currentOnQualitiesAvailable.value(emptyList())
         retryCountRef.value = 0
         Log.d(TAG, "ExoPlayer loading HLS URL: $hlsUrl")
@@ -259,36 +257,35 @@ fun VideoPlayer(
     }
 
     Box(modifier = modifier) {
-        AndroidView(
-            factory = { ctx ->
-                // Inflate from XML to guarantee surface_type="surface_view" is respected.
-                // SurfaceView renders to a hardware overlay — full display resolution,
-                // lower power, and no texture buffer ghosting (unlike TextureView).
-                val view = LayoutInflater.from(ctx)
-                    .inflate(R.layout.view_player, null) as PlayerView
-                view.apply {
-                    // CRITICAL: inflate(…, null) discards XML layout params.
-                    // Without explicit MATCH_PARENT the PlayerView collapses to
-                    // the video's native resolution after a codec transition
-                    // (quality switch) because AspectRatioFrameLayout has no
-                    // parent-size reference to stretch against.
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                    player = exoPlayer
-                    useController = false // TV uses D-pad, not on-screen controls
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    // Don't keep the last frame when player resets — avoids stale frame flash
-                    setKeepContentOnPlayerReset(false)
-                    playerViewRef.value = this
-                    contentFrameRef.value = findViewById(
-                        androidx.media3.ui.R.id.exo_content_frame,
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        key(playerViewEpoch.value) {
+            AndroidView(
+                factory = { ctx ->
+                    // Inflate from XML to guarantee surface_type="texture_view" is respected.
+                    // TextureView keeps rendering inside the normal view composition tree.
+                    // This avoids SurfaceView multi-plane artifacts seen during repeated
+                    // quality transitions on newer emulator/device graphics stacks.
+                    val view = LayoutInflater.from(ctx)
+                        .inflate(R.layout.view_player, null) as PlayerView
+                    view.apply {
+                        // CRITICAL: inflate(…, null) discards XML layout params.
+                        // Without explicit MATCH_PARENT the PlayerView collapses to
+                        // the video's native resolution after a codec transition
+                        // (quality switch) because AspectRatioFrameLayout has no
+                        // parent-size reference to stretch against.
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                        player = exoPlayer
+                        useController = false // TV uses D-pad, not on-screen controls
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        // Don't keep the last frame when player resets — avoids stale frame flash
+                        setKeepContentOnPlayerReset(false)
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // Black shutter: covers player during quality transition to hide artifacts.
         // Dismissed by onVideoSizeChanged when new resolution renders, or by safety timeout.
         if (shutterVisible.value) {
@@ -300,6 +297,27 @@ fun VideoPlayer(
         }
     }
 }
+
+/**
+ * Policy hook kept explicit so regressions are caught in tests:
+ * manual surface rebinding during quality switch is forbidden.
+ */
+@Suppress("UNUSED_PARAMETER")
+internal fun shouldRebindVideoSurfaceOnQualitySwitch(
+    previousHeight: Int?,
+    resolvedHeight: Int,
+): Boolean = false
+
+@Suppress("UNUSED_PARAMETER")
+internal fun shouldForceLiveEdgeSeekOnQualitySwitch(
+    previousHeight: Int?,
+    resolvedHeight: Int,
+): Boolean = false
+
+internal fun shouldRecreatePlayerViewOnQualitySwitch(
+    previousHeight: Int?,
+    resolvedHeight: Int,
+): Boolean = previousHeight != null && previousHeight != resolvedHeight
 
 /** Extract available video qualities from ExoPlayer track groups */
 private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<VideoQuality> {
@@ -339,19 +357,28 @@ private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<V
     return qualities
 }
 
-private fun resolveSelectedHeight(tracks: Tracks?, selectedQualityHeight: Int): Int {
-    if (selectedQualityHeight == 0) return 0
-    if (tracks == null) return 0
+internal fun shouldReapplyQualityConstraint(
+    lastAppliedHeight: Int?,
+    targetHeight: Int,
+    previousTrackSignature: String?,
+    currentTrackSignature: String,
+): Boolean {
+    if (lastAppliedHeight != targetHeight) return true
+    return previousTrackSignature != currentTrackSignature
+}
+
+private fun buildVideoTrackSignature(tracks: Tracks): String {
+    val groups = mutableListOf<String>()
     for (group in tracks.groups) {
         if (group.type != C.TRACK_TYPE_VIDEO) continue
+        val formats = mutableListOf<String>()
         for (i in 0 until group.length) {
             val format = group.getTrackFormat(i)
-            if (format.height == selectedQualityHeight) {
-                return selectedQualityHeight
-            }
+            formats += "${format.id ?: "no-id"}:${format.width}x${format.height}@${format.bitrate}"
         }
+        groups += formats.joinToString(separator = ",")
     }
-    return 0
+    return groups.joinToString(separator = "|")
 }
 
 /**

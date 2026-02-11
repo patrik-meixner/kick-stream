@@ -243,9 +243,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun onQualitiesAvailable(qualities: List<VideoQuality>) {
         // Update available qualities, preserving current selection
         val current = _uiState.value.selectedQualityHeight
-        _uiState.value = _uiState.value.copy(
-            availableQualities = qualities.map { it.copy(isSelected = it.height == current) },
-        )
+        val mapped = qualities.map { it.copy(isSelected = it.height == current) }
+        if (_uiState.value.availableQualities == mapped) return
+        _uiState.value = _uiState.value.copy(availableQualities = mapped)
     }
 
     fun selectQuality(height: Int) {
