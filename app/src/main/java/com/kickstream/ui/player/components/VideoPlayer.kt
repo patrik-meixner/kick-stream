@@ -74,7 +74,7 @@ fun VideoPlayer(
     val lastTracksRef = remember { Ref<Tracks?>(null) }
     val retryCountRef = remember { Ref(0) }
     val lastAppliedHeightRef = remember { Ref<Int?>(null) }
-    // Reference to the PlayerView for surface detach/reattach during quality switch
+    // Reference to the PlayerView's SurfaceView for surface clear during quality switch
     val playerViewRef = remember { Ref<PlayerView?>(null) }
     // Black shutter overlay: shown during quality switch, dismissed on onVideoSizeChanged
     val shutterVisible = remember { mutableStateOf(false) }
@@ -174,23 +174,35 @@ fun VideoPlayer(
             // (e.g., same-resolution tracks with different bitrates)
             mainHandler.postDelayed({ shutterVisible.value = false }, SHUTTER_TIMEOUT_MS)
 
-            // Detach player from PlayerView → apply track override → reattach.
-            // Setting player=null disconnects the surface, killing any ghost frames
-            // from the old decoder. Re-setting player=exoPlayer goes through
-            // PlayerView's full internal wiring (AspectRatioFrameLayout sizing,
-            // surface binding, etc.) so the new resolution fills the view correctly.
-            // This is safer than raw clearVideoSurface()/setVideoSurfaceView() which
-            // bypasses PlayerView's layout integration and causes tiny-video-in-corner.
+            // Flush the old decoder's frames from the SurfaceView hardware layer
+            // to prevent ghost/phantom streams during codec transition.
+            // Steps: (1) disconnect ExoPlayer from the surface, (2) force-clear
+            // the SurfaceView buffer via pixel format toggle, (3) apply the new
+            // track override, (4) rebind ExoPlayer to the surface.
+            // NOTE: we do NOT use pv.player = null/reattach — that breaks
+            // AspectRatioFrameLayout sizing and causes the video to shrink.
             val pv = playerViewRef.value
-            if (pv != null) {
-                pv.player = null
-                applyQualityConstraint(exoPlayer, resolvedHeight)
-                // Post re-attach to next frame so the decoder has time to flush
+            val surfaceView = pv?.videoSurfaceView as? android.view.SurfaceView
+
+            exoPlayer.clearVideoSurface()
+
+            // Force SurfaceView to discard its buffered frames by toggling the
+            // surface holder's pixel format. This causes the surface to be
+            // recreated, flushing any stale frames from previous decoders.
+            if (surfaceView != null) {
+                val holder = surfaceView.holder
+                holder.setFormat(android.graphics.PixelFormat.TRANSPARENT)
+                holder.setFormat(android.graphics.PixelFormat.OPAQUE)
+            }
+
+            applyQualityConstraint(exoPlayer, resolvedHeight)
+
+            // Rebind ExoPlayer to the surface on the next frame — gives the
+            // decoder time to flush and the surface to reset.
+            if (surfaceView != null) {
                 mainHandler.post {
-                    pv.player = exoPlayer
+                    exoPlayer.setVideoSurfaceView(surfaceView)
                 }
-            } else {
-                applyQualityConstraint(exoPlayer, resolvedHeight)
             }
         } else {
             applyQualityConstraint(exoPlayer, resolvedHeight)
