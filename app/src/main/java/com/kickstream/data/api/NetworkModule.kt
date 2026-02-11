@@ -1,17 +1,57 @@
 package com.kickstream.data.api
 
+import android.util.Log
+import com.kickstream.BuildConfig
 import com.kickstream.data.local.TokenStore
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.Route
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
 
 object NetworkModule {
+
+    private const val TAG = "KickStream"
+
+    /**
+     * SSL-permissive OkHttpClient for loading public CDN content (images, HLS streams).
+     *
+     * Android TV emulators (and some real TV devices with outdated CA stores) fail SSL
+     * chain validation for *.kick.com CDN certificates because the intermediate CAs
+     * aren't in the device's system trust store. Since these are public, unauthenticated
+     * URLs (thumbnails, stream manifests, chunks), we use a permissive TrustManager.
+     *
+     * NOT used for API calls — those go through [baseClient] with platform-default
+     * certificate validation.
+     */
+    val permissiveSslClient: OkHttpClient by lazy {
+        val trustManager = object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        }
+        val sslContext = SSLContext.getInstance("TLS").apply {
+            init(null, arrayOf(trustManager), SecureRandom())
+        }
+        OkHttpClient.Builder()
+            .sslSocketFactory(sslContext.socketFactory, trustManager)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -30,6 +70,73 @@ object NetworkModule {
         }
         chain.proceed(request)
     }
+
+    /**
+     * OkHttp Authenticator that transparently refreshes the access token on 401.
+     *
+     * When the Kick API returns 401 (expired/invalid token), this authenticator:
+     * 1. Uses the stored refresh_token to obtain a new access_token
+     * 2. Retries the original request with the fresh token
+     * 3. If refresh fails, strips the Authorization header entirely so public
+     *    endpoints (like /public/v1/channels) still work anonymously
+     *
+     * This avoids the "expired token poisons public requests" problem where
+     * attaching an invalid Bearer token to a public endpoint causes 401 instead
+     * of falling back to anonymous access.
+     */
+    private fun tokenAuthenticator(tokenStore: TokenStore): Authenticator =
+        object : Authenticator {
+            override fun authenticate(route: Route?, response: Response): Request? {
+                // Prevent infinite retry loops — if we already tried refreshing, give up
+                if (response.request.header("X-Token-Refreshed") != null) {
+                    Log.w(TAG, "Token refresh already attempted, stripping auth header for anonymous fallback")
+                    // Strip Authorization entirely so public endpoints work anonymously
+                    return response.request.newBuilder()
+                        .removeHeader("Authorization")
+                        .build()
+                }
+
+                Log.d(TAG, "Got 401, attempting token refresh...")
+
+                val newToken = runBlocking {
+                    try {
+                        val refreshToken = tokenStore.getRefreshToken() ?: return@runBlocking null
+                        val authApi = provideAuthApi()
+                        val tokenResponse = authApi.refreshToken(
+                            clientId = BuildConfig.KICK_CLIENT_ID,
+                            clientSecret = BuildConfig.KICK_CLIENT_SECRET,
+                            refreshToken = refreshToken,
+                        )
+                        tokenStore.saveTokens(
+                            tokenResponse.accessToken,
+                            tokenResponse.refreshToken,
+                            tokenResponse.expiresIn,
+                        )
+                        Log.d(TAG, "Token refreshed successfully")
+                        tokenResponse.accessToken
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Token refresh failed: ${e.message}")
+                        null
+                    }
+                }
+
+                return if (newToken != null) {
+                    // Retry with the fresh token
+                    response.request.newBuilder()
+                        .header("Authorization", "Bearer $newToken")
+                        .header("X-Token-Refreshed", "true")
+                        .build()
+                } else {
+                    // Refresh failed — strip auth header so public endpoints
+                    // still work without authentication
+                    Log.d(TAG, "Stripping Authorization header for anonymous fallback")
+                    response.request.newBuilder()
+                        .removeHeader("Authorization")
+                        .header("X-Token-Refreshed", "true")
+                        .build()
+                }
+            }
+        }
 
     // Ensures all requests explicitly ask for JSON (prevents HTML responses)
     private val jsonAcceptInterceptor = Interceptor { chain ->
@@ -52,6 +159,7 @@ object NetworkModule {
         baseClient.newBuilder()
             .addInterceptor(jsonAcceptInterceptor)
             .addInterceptor(authInterceptor(tokenStore))
+            .authenticator(tokenAuthenticator(tokenStore))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             })

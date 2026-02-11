@@ -98,7 +98,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     currentKickUserId = unofficial.id
                     Log.d(TAG, "Unofficial API chatroom ID: $chatroomId, kick user ID: $currentKickUserId")
                     // Use unofficial playback_url as fallback if official doesn't have it
-                    if (hlsUrl.isNullOrBlank() && !unofficial.playbackUrl.isNullOrBlank()) {
+                    // BUT only if the channel is actually live — unofficial API returns stale
+                    // playback URLs for offline channels, which would trick the player into
+                    // trying to connect to a dead stream (black screen + infinite reconnects).
+                    if (hlsUrl.isNullOrBlank() && !unofficial.playbackUrl.isNullOrBlank()
+                        && channel?.stream?.isLive == true
+                    ) {
                         hlsUrl = unofficial.playbackUrl
                         Log.d(TAG, "Using unofficial playback_url as fallback HLS")
                     }

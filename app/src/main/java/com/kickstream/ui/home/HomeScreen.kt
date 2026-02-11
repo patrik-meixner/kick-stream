@@ -1,5 +1,10 @@
 package com.kickstream.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,12 +14,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -22,18 +32,21 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.kickstream.R
 import com.kickstream.data.repository.FollowedChannel
 import com.kickstream.ui.components.KickLoader
 import com.kickstream.ui.home.components.ContentRow
 import com.kickstream.ui.home.components.FollowedChannelCard
 import com.kickstream.ui.home.components.NavigationRail
 import com.kickstream.ui.home.components.SearchContent
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -167,14 +180,22 @@ private fun FollowingContent(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painter = painterResource(R.drawable.ic_kick_k),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .alpha(0.3f),
+                )
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "No followed channels yet",
+                    text = "No followed channels",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Search for a channel, then follow it from the player",
+                    text = "Use Search to find channels, then star them from the player",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -188,6 +209,16 @@ private fun FollowingContent(
             }
         }
     } else {
+        // Track visibility for entrance animations
+        var showLiveRow by remember { mutableStateOf(false) }
+        var showOfflineRow by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            showLiveRow = true
+            delay(150)
+            showOfflineRow = true
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -196,36 +227,46 @@ private fun FollowingContent(
         ) {
             if (liveChannels.isNotEmpty()) {
                 item(key = "live-row") {
-                    ContentRow(
-                        title = "Live Now",
-                        items = liveChannels,
-                        itemKey = { it.slug },
-
-                        firstItemFocusRequester = contentFocusRequester,
-                    ) { channel, focusReq ->
-                        FollowedChannelCard(
-                            channel = channel,
-                            onClick = { onChannelSelected(channel.slug) },
-                            focusRequester = focusReq,
-                        )
+                    AnimatedVisibility(
+                        visible = showLiveRow,
+                        enter = fadeIn(animationSpec = tween(400)) +
+                            slideInVertically(animationSpec = tween(400)) { it / 3 },
+                    ) {
+                        ContentRow(
+                            title = "Live Now",
+                            items = liveChannels,
+                            itemKey = { it.slug },
+                            firstItemFocusRequester = contentFocusRequester,
+                        ) { channel, focusReq ->
+                            FollowedChannelCard(
+                                channel = channel,
+                                onClick = { onChannelSelected(channel.slug) },
+                                focusRequester = focusReq,
+                            )
+                        }
                     }
                 }
             }
 
             if (offlineChannels.isNotEmpty()) {
                 item(key = "offline-row") {
-                    ContentRow(
-                        title = "Offline",
-                        items = offlineChannels,
-                        itemKey = { it.slug },
-
-                        firstItemFocusRequester = if (liveChannels.isEmpty()) contentFocusRequester else null,
-                    ) { channel, focusReq ->
-                        FollowedChannelCard(
-                            channel = channel,
-                            onClick = { onChannelSelected(channel.slug) },
-                            focusRequester = focusReq,
-                        )
+                    AnimatedVisibility(
+                        visible = showOfflineRow,
+                        enter = fadeIn(animationSpec = tween(400)) +
+                            slideInVertically(animationSpec = tween(400)) { it / 3 },
+                    ) {
+                        ContentRow(
+                            title = "Offline",
+                            items = offlineChannels,
+                            itemKey = { it.slug },
+                            firstItemFocusRequester = if (liveChannels.isEmpty()) contentFocusRequester else null,
+                        ) { channel, focusReq ->
+                            FollowedChannelCard(
+                                channel = channel,
+                                onClick = { onChannelSelected(channel.slug) },
+                                focusRequester = focusReq,
+                            )
+                        }
                     }
                 }
             }
@@ -240,4 +281,3 @@ private fun FollowingContent(
         // This prevents the Enter key from the rail leaking into the Card.
     }
 }
-

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -24,13 +25,14 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.kickstream.R
+import com.kickstream.data.api.NetworkModule
 
 private const val TAG = "KickStream"
 private const val MAX_RETRIES = 3
@@ -62,8 +64,9 @@ fun VideoPlayer(
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
-    // Shared data source factory — reused across HLS URL changes
-    val dataSourceFactory = remember { DefaultHttpDataSource.Factory() }
+    // Shared data source factory — routes HLS through the SSL-permissive OkHttpClient
+    // so TV emulators with outdated CA stores can validate Kick CDN certificates.
+    val dataSourceFactory = remember { OkHttpDataSource.Factory(NetworkModule.permissiveSslClient) }
 
     val currentOnBufferingChanged = rememberUpdatedState(onBufferingChanged)
     val currentOnQualitiesAvailable = rememberUpdatedState(onQualitiesAvailable)
@@ -95,6 +98,13 @@ fun VideoPlayer(
 
         ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                /* handleAudioFocus */ true,
+            )
             .build()
             .apply {
                 playWhenReady = true

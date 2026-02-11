@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import android.util.Log
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,9 +31,9 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import android.util.Log
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.kickstream.data.repository.FollowedChannel
+import com.kickstream.ui.components.ShimmerBox
 import com.kickstream.ui.theme.KickGreen
 import com.kickstream.ui.theme.LocalExtendedColors
 
@@ -79,12 +80,14 @@ fun FollowedChannelCard(
                     ?.takeIf { it.isNotBlank() }
                 Log.d("KickStream", "Card '${channel.slug}': imageUrl=$imageUrl, thumbnail=${channel.thumbnail}, profilePic=${channel.profilePicture}")
                 if (imageUrl != null) {
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = imageUrl,
                         contentDescription = channel.slug,
                         modifier = Modifier.matchParentSize(),
                         contentScale = ContentScale.Crop,
-                        onError = { Log.e("KickStream", "Coil failed to load image for '${channel.slug}': ${it.result.throwable.message}, url=$imageUrl") },
+                        loading = { ShimmerBox(Modifier.matchParentSize()) },
+                        onError = { Log.e("KickStream", "Coil failed for '${channel.slug}': ${it.result.throwable.message}, url=$imageUrl") },
+                        onSuccess = { Log.d("KickStream", "Coil loaded image for '${channel.slug}': url=$imageUrl") },
                     )
                 } else {
                     // No image available — show styled initial letter in a circle
@@ -144,25 +147,78 @@ fun FollowedChannelCard(
                 }
             }
 
-            // Info section
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = channel.slug,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = if (channel.isLive) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (channel.isLive && channel.streamTitle != null) {
-                    Spacer(Modifier.height(2.dp))
+            // Info section with avatar
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Profile avatar
+                val avatarUrl = channel.profilePicture?.takeIf { it.isNotBlank() }
+                if (avatarUrl != null) {
+                    SubcomposeAsyncImage(
+                        model = avatarUrl,
+                        contentDescription = "${channel.slug} avatar",
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                        loading = { ShimmerBox(Modifier.matchParentSize().clip(CircleShape)) },
+                        onError = { Log.e("KickStream", "Avatar failed for '${channel.slug}': ${it.result.throwable.message}, url=$avatarUrl") },
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(KickGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = channel.slug.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = KickGreen,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = channel.streamTitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = channel.slug,
+                        style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (channel.isLive) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (channel.isLive && channel.streamTitle != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = channel.streamTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // Category chip for live channels
+                    if (channel.isLive && channel.categoryName != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(extendedColors.kickGreenAlpha),
+                        ) {
+                            Text(
+                                text = channel.categoryName,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
         }

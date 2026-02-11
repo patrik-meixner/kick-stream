@@ -18,8 +18,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,10 +29,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.kickstream.data.api.model.LivestreamData
+import com.kickstream.ui.components.ShimmerBox
 import com.kickstream.ui.theme.LocalExtendedColors
 
 @Composable
@@ -45,16 +47,16 @@ fun LiveChannelCard(
 
     Card(
         onClick = onClick,
-        shape = androidx.tv.material3.CardDefaults.shape(
+        shape = CardDefaults.shape(
             shape = RoundedCornerShape(12.dp),
         ),
-        border = androidx.tv.material3.CardDefaults.border(
+        border = CardDefaults.border(
             focusedBorder = androidx.tv.material3.Border(
                 border = BorderStroke(2.dp, Color(0xFF53FC18)),
                 shape = RoundedCornerShape(12.dp),
             ),
         ),
-        scale = androidx.tv.material3.CardDefaults.scale(
+        scale = CardDefaults.scale(
             focusedScale = 1.05f,
         ),
         modifier = Modifier
@@ -74,11 +76,12 @@ fun LiveChannelCard(
             ) {
                 val thumbnailUrl = stream.thumbnail
                 if (thumbnailUrl != null) {
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = thumbnailUrl,
                         contentDescription = stream.slug,
                         modifier = Modifier.matchParentSize(),
                         contentScale = ContentScale.Crop,
+                        loading = { ShimmerBox(Modifier.matchParentSize()) },
                     )
                 }
 

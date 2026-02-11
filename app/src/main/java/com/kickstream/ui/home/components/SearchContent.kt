@@ -9,9 +9,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -135,7 +138,7 @@ fun SearchContent(
                 )
             }
         } else {
-            // No search yet — show hint
+            // No search yet — show hint with Kick logo
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(
                     modifier = Modifier
@@ -143,11 +146,21 @@ fun SearchContent(
                         .padding(top = 64.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "Type to search for channels",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_kick_k),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .alpha(0.3f),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "Type to search for channels",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

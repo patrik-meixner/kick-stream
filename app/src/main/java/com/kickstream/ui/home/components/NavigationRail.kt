@@ -2,12 +2,15 @@ package com.kickstream.ui.home.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -52,9 +55,9 @@ fun NavigationRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(80.dp)
+            .width(IntrinsicSize.Min)
             .background(DarkSurface)
-            .padding(horizontal = 8.dp, vertical = 24.dp),
+            .padding(horizontal = 10.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
     ) {
@@ -121,7 +124,12 @@ private fun RailItem(
     focusRequester: FocusRequester,
 ) {
     val isFocused = remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    // Four visual states: selected+focused, selected, focused, idle.
+    // When the already-selected item is focused, bump the background brightness
+    // and add a border so the user can clearly see the D-pad cursor position.
     val bgColor = when {
+        isSelected && isFocused.value -> KickGreen.copy(alpha = 0.25f)
         isSelected -> KickGreen.copy(alpha = 0.15f)
         isFocused.value -> KickGreen.copy(alpha = 0.08f)
         else -> DarkSurface
@@ -135,6 +143,12 @@ private fun RailItem(
         isSelected -> KickGreen
         isFocused.value -> OnDarkSurface
         else -> OnDarkSurfaceVariant
+    }
+    val shape = RoundedCornerShape(12.dp)
+    val borderModifier = if (isFocused.value) {
+        Modifier.border(1.5.dp, KickGreen.copy(alpha = 0.6f), shape)
+    } else {
+        Modifier
     }
 
     Column(
@@ -155,10 +169,11 @@ private fun RailItem(
                 }
             }
             .focusable()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shape)
+            .then(borderModifier)
+            .fillMaxWidth()
             .background(bgColor)
-            .padding(vertical = 8.dp, horizontal = 12.dp)
-            .width(56.dp),
+            .padding(vertical = 8.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
