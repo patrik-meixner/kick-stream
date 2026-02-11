@@ -277,6 +277,74 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(showControls = false, showQualityMenu = false)
     }
 
+    /** Pause expensive resources when app goes to background */
+    fun onPause() {
+        chatJob?.cancel()
+        chatFlushJob?.cancel()
+        chatRepository.disconnect()
+        Log.d(TAG, "PlayerViewModel paused: chat disconnected")
+    }
+
+    /** Resume resources when app returns to foreground */
+    fun onResume() {
+        val slug = currentSlug.takeIf { it.isNotBlank() } ?: return
+
+        // Clear stale chat messages accumulated while in background
+        chatBuffer.clear()
+        chatDirty = false
+        _uiState.value = _uiState.value.copy(chatMessages = emptyList())
+
+        // Reconnect chat if we have a chatroom
+        val chatroomId = _uiState.value.chatroomId
+        if (chatroomId != null) {
+            subscribeToChatroom(chatroomId)
+            Log.d(TAG, "PlayerViewModel resumed: chat reconnected to room $chatroomId")
+        }
+
+        // Re-check channel status — the stream may have gone offline while the TV was off.
+        // This is a lightweight partial update: only stream-related fields change,
+        // UI preferences (chat visibility, quality, follow state) are preserved.
+        viewModelScope.launch {
+            try {
+                val channelResult = channelRepository.getChannel(slug)
+                val channel = channelResult.getOrNull()
+                var hlsUrl = channel?.stream?.url?.takeIf { it.isNotBlank() }
+
+                // Fallback to unofficial playback_url (only if actually live)
+                if (hlsUrl.isNullOrBlank()) {
+                    try {
+                        val unofficial = unofficialApi.getChannel(slug)
+                        if (!unofficial.playbackUrl.isNullOrBlank() && channel?.stream?.isLive == true) {
+                            hlsUrl = unofficial.playbackUrl
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Resume: failed to get unofficial data: ${e.message}")
+                    }
+                }
+
+                val isOffline = hlsUrl.isNullOrBlank() && channel?.stream?.isLive != true
+                val prev = _uiState.value
+
+                // Only update if status actually changed to avoid unnecessary recomposition
+                if (isOffline != prev.isOffline || hlsUrl != prev.hlsUrl) {
+                    Log.d(TAG, "Resume: stream status changed — offline=$isOffline, hlsUrl=$hlsUrl")
+                    _uiState.value = prev.copy(
+                        hlsUrl = hlsUrl,
+                        isOffline = isOffline,
+                        streamTitle = channel?.streamTitle ?: prev.streamTitle,
+                        viewerCount = channel?.stream?.viewerCount ?: 0,
+                        categoryName = channel?.category?.name ?: prev.categoryName,
+                    )
+                } else {
+                    Log.d(TAG, "Resume: stream status unchanged (offline=$isOffline)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Resume: failed to re-check channel status: ${e.message}")
+                // Don't update UI on failure — keep showing whatever was there before
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         chatJob?.cancel()

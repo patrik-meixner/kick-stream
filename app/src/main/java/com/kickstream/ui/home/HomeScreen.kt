@@ -46,6 +46,7 @@ import com.kickstream.ui.home.components.ContentRow
 import com.kickstream.ui.home.components.FollowedChannelCard
 import com.kickstream.ui.home.components.NavigationRail
 import com.kickstream.ui.home.components.SearchContent
+import com.kickstream.util.LifecycleResumeEffect
 import kotlinx.coroutines.delay
 
 @Composable
@@ -55,6 +56,12 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Refresh followed channels whenever this screen becomes visible again
+    // (back from player, app resume from background, TV wake from sleep)
+    LifecycleResumeEffect {
+        viewModel.refresh()
+    }
 
     when {
         uiState.isLoading -> {

@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kickstream.util.LifecycleStartStopEffect
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
@@ -88,6 +89,14 @@ fun PlayerScreen(
     LaunchedEffect(channelSlug) {
         viewModel.loadChannel(channelSlug)
     }
+
+    // Pause player + chat when app goes to background, resume on foreground.
+    // This prevents battery drain from video decoding and WebSocket connections
+    // running while the TV is off or the user is in another app.
+    LifecycleStartStopEffect(
+        onStop = { viewModel.onPause() },
+        onStart = { viewModel.onResume() },
+    )
 
     Box(
         modifier = Modifier

@@ -242,7 +242,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun refresh() = loadData()
+    /**
+     * Silently refresh followed channels in the background.
+     * Keeps current data visible (no loading spinner) until the new data arrives.
+     * Only shows the full loader on the very first load when there's nothing to show.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            try {
+                val followed = followRepository.getFollowedChannels().getOrDefault(emptyList())
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    followedChannels = followed.sortedByDescending { it.isLive },
+                    error = null,
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Background refresh failed: ${e.message}")
+                // Don't overwrite existing data on failure — keep showing what we had
+            }
+        }
+    }
 
     fun logout(onLogoutComplete: () -> Unit) {
         viewModelScope.launch {

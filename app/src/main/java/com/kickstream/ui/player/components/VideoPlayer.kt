@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.kickstream.util.LifecycleStartStopEffect
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -194,6 +195,21 @@ fun VideoPlayer(
             exoPlayer.release()
         }
     }
+
+    // Pause playback when app goes to background to save battery and prevent
+    // stale buffered frames. On resume, seek to live edge for fresh content.
+    LifecycleStartStopEffect(
+        onStop = {
+            exoPlayer.playWhenReady = false
+        },
+        onStart = {
+            exoPlayer.playWhenReady = true
+            // Seek to live edge so the user sees current content, not stale buffer
+            if (exoPlayer.isCurrentMediaItemLive) {
+                exoPlayer.seekToDefaultPosition()
+            }
+        },
+    )
 
     Box(modifier = modifier) {
         AndroidView(

@@ -10,6 +10,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.kickstream.navigation.AppNavigation
 import com.kickstream.ui.theme.KickStreamTheme
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import com.kickstream.data.local.TokenStore
+import com.kickstream.data.api.NetworkModule
+import com.kickstream.data.repository.AuthRepository
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,6 +34,18 @@ class MainActivity : ComponentActivity() {
             KickStreamTheme {
                 AppNavigation()
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Proactively refresh token when app returns from background.
+        // This prevents stale token errors on API calls after long sleep.
+        val tokenStore = TokenStore(application)
+        val authApi = NetworkModule.provideAuthApi()
+        val authRepository = AuthRepository(authApi, tokenStore)
+        MainScope().launch {
+            authRepository.refreshTokenIfNeeded()
         }
     }
 }
