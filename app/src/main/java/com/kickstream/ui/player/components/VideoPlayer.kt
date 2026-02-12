@@ -75,6 +75,9 @@ fun VideoPlayer(
     val retryCountRef = remember { Ref(0) }
     val lastEmittedQualitiesRef = remember { Ref<List<VideoQuality>>(emptyList()) }
     val playerViewRef = remember { Ref<PlayerView?>(null) }
+    // Tracks whether layout has been validated since last video size change.
+    // Prevents redundant requestLayout() calls on every AndroidView.update {}.
+    val layoutValidatedRef = remember { Ref(false) }
 
     val exoPlayer = remember(hlsUrl, selectedQualityHeight) {
         // Tuned buffer for live HLS on TV:
@@ -157,6 +160,8 @@ fun VideoPlayer(
                         // Ignore transient 0x0 callbacks around decoder resets.
                         // Dismissing only on real dimensions avoids exposing half-transition states.
                         if (videoSize.width > 0 && videoSize.height > 0) {
+                            // Invalidate so the next update {} re-validates layout
+                            layoutValidatedRef.value = false
                             // On some TV emulator stacks, the underlying SurfaceView can
                             // retain source-sized layout params after decoder reconfig.
                             // Force full-bounds layout so rendering stretches back to container.
@@ -187,6 +192,7 @@ fun VideoPlayer(
         lastEmittedQualitiesRef.value = emptyList()
         currentOnQualitiesAvailable.value(emptyList())
         retryCountRef.value = 0
+        layoutValidatedRef.value = false
     }
 
     DisposableEffect(exoPlayer) {
@@ -241,7 +247,12 @@ fun VideoPlayer(
                     view.player = exoPlayer
                 }
                 playerViewRef.value = view
-                ensurePlayerViewFillsBounds(view)
+                // Skip redundant layout validation on recomposition — only re-run
+                // after onVideoSizeChanged invalidates the flag.
+                if (!layoutValidatedRef.value) {
+                    ensurePlayerViewFillsBounds(view)
+                    layoutValidatedRef.value = true
+                }
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -289,18 +300,19 @@ private fun extractQualities(tracks: Tracks, selectedQualityHeight: Int): List<V
 private fun ensurePlayerViewFillsBounds(playerView: PlayerView?) {
     if (playerView == null) return
 
-    val matchParent = FrameLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.MATCH_PARENT,
-    ).apply {
-        gravity = Gravity.CENTER
-    }
+    var changed = false
 
     val pvLp = playerView.layoutParams
     if (pvLp?.width != ViewGroup.LayoutParams.MATCH_PARENT ||
         pvLp.height != ViewGroup.LayoutParams.MATCH_PARENT
     ) {
-        playerView.layoutParams = matchParent
+        playerView.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+        changed = true
     }
 
     val contentFrame = playerView.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
@@ -317,6 +329,7 @@ private fun ensurePlayerViewFillsBounds(playerView: PlayerView?) {
         ).apply {
             gravity = Gravity.CENTER
         }
+        changed = true
     }
 
     val surfaceView = playerView.videoSurfaceView
@@ -333,6 +346,7 @@ private fun ensurePlayerViewFillsBounds(playerView: PlayerView?) {
         ).apply {
             gravity = Gravity.CENTER
         }
+        changed = true
     }
     if (surfaceView is TextureView) {
         // Defensive reset: stale transform matrices on repeated decoder/surface
@@ -344,11 +358,16 @@ private fun ensurePlayerViewFillsBounds(playerView: PlayerView?) {
         surfaceView.translationY = 0f
         surfaceView.pivotX = 0f
         surfaceView.pivotY = 0f
+        changed = true
     }
 
-    contentFrame?.requestLayout()
-    surfaceView?.requestLayout()
-    playerView.requestLayout()
+    // Only trigger layout passes when something actually changed —
+    // avoids expensive measure/layout cycles on every recomposition.
+    if (changed) {
+        contentFrame?.requestLayout()
+        surfaceView?.requestLayout()
+        playerView.requestLayout()
+    }
 }
 
 /**

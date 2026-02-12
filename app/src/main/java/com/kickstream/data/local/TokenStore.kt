@@ -22,11 +22,15 @@ class TokenStore(private val context: Context) {
 
     @Volatile
     private var cachedAccessToken: String? = null
+    @Volatile
+    private var cachedRefreshToken: String? = null
 
     init {
         // Prime the token cache from DataStore on creation (non-blocking)
         scope.launch {
-            cachedAccessToken = context.dataStore.data.first()[ACCESS_TOKEN]
+            val prefs = context.dataStore.data.first()
+            cachedAccessToken = prefs[ACCESS_TOKEN]
+            cachedRefreshToken = prefs[REFRESH_TOKEN]
         }
     }
 
@@ -42,10 +46,27 @@ class TokenStore(private val context: Context) {
 
     suspend fun saveTokens(accessToken: String, refreshToken: String?, expiresIn: Long) {
         cachedAccessToken = accessToken
+        refreshToken?.let { cachedRefreshToken = it }
         context.dataStore.edit { prefs ->
             prefs[ACCESS_TOKEN] = accessToken
             refreshToken?.let { prefs[REFRESH_TOKEN] = it }
             prefs[EXPIRES_AT] = System.currentTimeMillis() + (expiresIn * 1000)
+        }
+    }
+
+    /**
+     * Synchronous token save for use in OkHttp Authenticator (runs on OkHttp dispatcher thread).
+     * Updates in-memory cache immediately, persists to DataStore in the background.
+     */
+    fun saveTokensSync(accessToken: String, refreshToken: String?, expiresIn: Long) {
+        cachedAccessToken = accessToken
+        refreshToken?.let { cachedRefreshToken = it }
+        scope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[ACCESS_TOKEN] = accessToken
+                refreshToken?.let { prefs[REFRESH_TOKEN] = it }
+                prefs[EXPIRES_AT] = System.currentTimeMillis() + (expiresIn * 1000)
+            }
         }
     }
 
@@ -57,8 +78,13 @@ class TokenStore(private val context: Context) {
 
     fun getAccessTokenSync(): String? = cachedAccessToken
 
-    suspend fun getRefreshToken(): String? =
-        context.dataStore.data.first()[REFRESH_TOKEN]
+    fun getRefreshTokenSync(): String? = cachedRefreshToken
+
+    suspend fun getRefreshToken(): String? {
+        val token = context.dataStore.data.first()[REFRESH_TOKEN]
+        cachedRefreshToken = token
+        return token
+    }
 
     suspend fun isTokenExpired(): Boolean {
         val expiresAt = context.dataStore.data.first()[EXPIRES_AT] ?: return true
@@ -67,6 +93,7 @@ class TokenStore(private val context: Context) {
 
     suspend fun clear() {
         cachedAccessToken = null
+        cachedRefreshToken = null
         context.dataStore.edit { it.clear() }
     }
 }

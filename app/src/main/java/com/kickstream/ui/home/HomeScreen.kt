@@ -106,6 +106,12 @@ private fun MainContent(
     val followingFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
 
+    // Auto-focus the navigation rail when home screen first loads
+    // so the user can immediately navigate with D-pad.
+    LaunchedEffect(Unit) {
+        try { railFocusRequester.requestFocus() } catch (_: IllegalStateException) { }
+    }
+
     Row(Modifier.fillMaxSize()) {
         // Left navigation rail
         NavigationRail(

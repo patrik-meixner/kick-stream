@@ -2,10 +2,11 @@ package com.kickstream.data.api
 
 import android.util.Log
 import com.kickstream.BuildConfig
+import com.kickstream.data.api.model.AuthTokenResponse
 import com.kickstream.data.local.TokenStore
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
+import okhttp3.FormBody
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -16,6 +17,8 @@ import okhttp3.Route
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import okhttp3.Cache
+import java.io.File
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
@@ -25,6 +28,14 @@ import javax.net.ssl.X509TrustManager
 object NetworkModule {
 
     private const val TAG = "KickStream"
+    private const val HTTP_CACHE_SIZE = 10L * 1024 * 1024 // 10 MB
+
+    private var httpCache: Cache? = null
+
+    /** Call once from Application.onCreate() to enable HTTP disk caching. */
+    fun init(cacheDir: File) {
+        httpCache = Cache(File(cacheDir, "http_cache"), HTTP_CACHE_SIZE)
+    }
 
     /**
      * SSL-permissive OkHttpClient for loading public CDN content (images, HLS streams).
@@ -98,26 +109,41 @@ object NetworkModule {
 
                 Log.d(TAG, "Got 401, attempting token refresh...")
 
-                val newToken = runBlocking {
-                    try {
-                        val refreshToken = tokenStore.getRefreshToken() ?: return@runBlocking null
-                        val authApi = provideAuthApi()
-                        val tokenResponse = authApi.refreshToken(
-                            clientId = BuildConfig.KICK_CLIENT_ID,
-                            clientSecret = BuildConfig.KICK_CLIENT_SECRET,
-                            refreshToken = refreshToken,
-                        )
-                        tokenStore.saveTokens(
-                            tokenResponse.accessToken,
-                            tokenResponse.refreshToken,
-                            tokenResponse.expiresIn,
-                        )
-                        Log.d(TAG, "Token refreshed successfully")
-                        tokenResponse.accessToken
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Token refresh failed: ${e.message}")
+                val newToken = try {
+                    val refreshToken = tokenStore.getRefreshTokenSync() ?: run {
+                        Log.w(TAG, "No refresh token available")
                         null
                     }
+                    if (refreshToken != null) {
+                        val formBody = FormBody.Builder()
+                            .add("grant_type", "refresh_token")
+                            .add("client_id", BuildConfig.KICK_CLIENT_ID)
+                            .add("client_secret", BuildConfig.KICK_CLIENT_SECRET)
+                            .add("refresh_token", refreshToken)
+                            .build()
+                        val refreshRequest = Request.Builder()
+                            .url("https://id.kick.com/oauth/token")
+                            .post(formBody)
+                            .build()
+                        val refreshResponse = authOkHttp.newCall(refreshRequest).execute()
+                        val body = refreshResponse.body?.string()
+                        if (refreshResponse.isSuccessful && body != null) {
+                            val tokenResponse = json.decodeFromString<AuthTokenResponse>(body)
+                            tokenStore.saveTokensSync(
+                                tokenResponse.accessToken,
+                                tokenResponse.refreshToken,
+                                tokenResponse.expiresIn,
+                            )
+                            Log.d(TAG, "Token refreshed successfully")
+                            tokenResponse.accessToken
+                        } else {
+                            Log.w(TAG, "Token refresh HTTP ${refreshResponse.code}: $body")
+                            null
+                        }
+                    } else null
+                } catch (e: Exception) {
+                    Log.w(TAG, "Token refresh failed: ${e.message}")
+                    null
                 }
 
                 return if (newToken != null) {
@@ -147,11 +173,12 @@ object NetworkModule {
     }
 
     // Shared base client — all other clients derive from this via newBuilder()
-    // to share the connection pool and dispatcher thread pool
+    // to share the connection pool, dispatcher thread pool, and HTTP cache
     private val baseClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
+            .apply { httpCache?.let { cache(it) } }
             .build()
     }
 

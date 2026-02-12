@@ -13,6 +13,11 @@ import com.kickstream.data.api.NetworkModule
 
 class KickStreamApp : Application(), ImageLoaderFactory {
 
+    override fun onCreate() {
+        super.onCreate()
+        NetworkModule.init(cacheDir)
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .okHttpClient(NetworkModule.permissiveSslClient)

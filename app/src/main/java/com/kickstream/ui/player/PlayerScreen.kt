@@ -73,6 +73,33 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
+
+    // Focus management for Android TV D-pad navigation.
+    // rootFocusRequester: always-present target for when overlays dismiss.
+    // focusRestoreKey: incremented after quality selection to force LaunchedEffect re-fire
+    //   (quality change recreates ExoPlayer via remember key, orphaning focus).
+    val rootFocusRequester = remember { FocusRequester() }
+    var focusRestoreKey by remember { mutableStateOf(0) }
+
+    // Restore focus to root when controls hide — prevents D-pad becoming unresponsive
+    LaunchedEffect(uiState.showControls) {
+        if (!uiState.showControls) {
+            try { rootFocusRequester.requestFocus() } catch (_: IllegalStateException) { }
+        }
+    }
+
+    // When quality menu closes but controls stay visible, refocus controls row
+    LaunchedEffect(uiState.showQualityMenu) {
+        if (!uiState.showQualityMenu && uiState.showControls) {
+            focusRestoreKey++
+        }
+    }
+
+    // Initial focus on the root Box when player screen loads
+    LaunchedEffect(Unit) {
+        try { rootFocusRequester.requestFocus() } catch (_: IllegalStateException) { }
+    }
 
     // Back: dismiss quality menu → hide controls → navigate back
     BackHandler(enabled = true) {
@@ -101,6 +128,7 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .focusRequester(rootFocusRequester)
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     // Reset auto-hide timer on any key press while controls are visible
@@ -315,7 +343,7 @@ fun PlayerScreen(
                                 .clipToBounds(),
                         ) {
                             ChatSidebar(
-                                messages = uiState.chatMessages,
+                                messages = chatMessages,
                                 subscriberBadgeUrls = uiState.subscriberBadgeUrls,
                                 modifier = Modifier.requiredWidth(280.dp),
                             )
@@ -357,9 +385,10 @@ fun PlayerScreen(
                             enter = fadeIn(),
                             exit = fadeOut(),
                         ) {
-                            // Auto-focus the chat button when controls overlay appears
-                            LaunchedEffect(Unit) {
-                                controlsFocusRequester.requestFocus()
+                            // Auto-focus the chat button when controls overlay appears,
+                            // AND after quality selection (focusRestoreKey changes).
+                            LaunchedEffect(focusRestoreKey) {
+                                try { controlsFocusRequester.requestFocus() } catch (_: IllegalStateException) { }
                             }
 
                             // Track quality button's screen-X so we can place the menu above it
@@ -661,6 +690,7 @@ fun PlayerScreen(
                                                 onClick = {
                                                     viewModel.selectQuality(quality.height)
                                                     viewModel.showControls()
+                                                    focusRestoreKey++
                                                 },
                                                 shape = ButtonDefaults.shape(
                                                     shape = RoundedCornerShape(6.dp),
@@ -731,7 +761,7 @@ fun PlayerScreen(
                                 .clipToBounds(),
                         ) {
                             ChatSidebar(
-                                messages = uiState.chatMessages,
+                                messages = chatMessages,
                                 subscriberBadgeUrls = uiState.subscriberBadgeUrls,
                                 modifier = Modifier.requiredWidth(280.dp),
                             )

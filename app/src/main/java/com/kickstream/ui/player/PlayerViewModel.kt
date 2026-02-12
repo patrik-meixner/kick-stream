@@ -30,7 +30,6 @@ data class PlayerUiState(
     val categoryName: String? = null,
     val hlsUrl: String? = null,
     val chatroomId: Int? = null,
-    val chatMessages: List<ParsedChatMessage> = emptyList(),
     /** Maps subscriber badge months → custom badge image URL from the channel */
     val subscriberBadgeUrls: Map<Int, String> = emptyMap(),
     val isChatVisible: Boolean = false,
@@ -62,6 +61,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    // Chat messages in a separate StateFlow to avoid recomposing the entire player
+    // screen (video overlay, controls, quality menu) on every 100ms chat flush.
+    private val _chatMessages = MutableStateFlow<List<ParsedChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<ParsedChatMessage>> = _chatMessages.asStateFlow()
 
     private val maxChatMessages = 200
     private val chatBuffer = ArrayDeque<ParsedChatMessage>(maxChatMessages)
@@ -204,7 +208,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 delay(CHAT_FLUSH_INTERVAL_MS)
                 if (chatDirty) {
                     chatDirty = false
-                    _uiState.value = _uiState.value.copy(chatMessages = chatBuffer.toList())
+                    _chatMessages.value = chatBuffer.toList()
                 }
             }
         }
@@ -292,7 +296,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         // Clear stale chat messages accumulated while in background
         chatBuffer.clear()
         chatDirty = false
-        _uiState.value = _uiState.value.copy(chatMessages = emptyList())
+        _chatMessages.value = emptyList()
 
         // Reconnect chat if we have a chatroom
         val chatroomId = _uiState.value.chatroomId

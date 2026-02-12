@@ -29,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.TextStyle
@@ -119,6 +121,12 @@ private fun QrCodeLoginContent(
     onWebView: () -> Unit,
     onManualCode: () -> Unit,
 ) {
+    // Auto-focus the primary action button so the TV remote works immediately
+    val initialFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        try { initialFocusRequester.requestFocus() } catch (_: IllegalStateException) { }
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -180,7 +188,10 @@ private fun QrCodeLoginContent(
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Button(onClick = onWebView) {
+            Button(
+                onClick = onWebView,
+                modifier = Modifier.focusRequester(initialFocusRequester),
+            ) {
                 Text("Sign in on this device")
             }
             Spacer(modifier = Modifier.width(16.dp))
